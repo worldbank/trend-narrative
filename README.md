@@ -152,6 +152,10 @@ trend-narrative/
 └── README.md
 ```
 
+## Contact
+
+For questions, feedback, or collaboration enquiries, please reach out to [ysuzuki2@worldbank.org](mailto:ysuzuki2@worldbank.org).
+
 ## License
 
 This project is licensed under the MIT License together with the [World Bank IGO Rider](WB-IGO-RIDER.md). The Rider is purely procedural: it reserves all privileges and immunities enjoyed by the World Bank, without adding restrictions to the MIT permissions. Please review both files before using, distributing or contributing.
