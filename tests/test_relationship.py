@@ -492,16 +492,31 @@ class TestRelationshipNarrativeComovement:
 # ---------------------------------------------------------------------------
 
 class TestRelationshipNarrativeLaggedCorrelation:
-    def test_positive_correlation(self):
-        years = np.arange(2010, 2020)
-        ref_values = np.array([100, 108, 112, 125, 128, 140, 145, 155, 162, 175], dtype=float)
-        comp_values = np.array([50, 55, 58, 65, 68, 75, 78, 85, 90, 98], dtype=float)
+    # Shared test data
+    periods_10 = np.arange(1, 11)
+    periods_15 = np.arange(1, 16)
+    # Lag 0: strong positive correlation
+    ref_lag0_pos = np.array([100, 108, 112, 125, 128, 140, 145, 155, 162, 175], dtype=float)
+    comp_lag0_pos = np.array([50, 55, 58, 65, 68, 75, 78, 85, 90, 98], dtype=float)
+    # Lag 0: strong negative correlation
+    ref_lag0_neg = np.array([100, 110, 115, 130, 140, 145, 160, 175, 180, 200], dtype=float)
+    comp_lag0_neg = np.array([100, 95, 93, 85, 80, 78, 70, 62, 60, 50], dtype=float)
+    # Lag 0: insignificant correlation
+    ref_lag0_insig = np.array([100, 105, 102, 108, 104, 110, 106, 112, 108, 114], dtype=float)
+    comp_lag0_insig = np.array([50, 48, 52, 49, 51, 47, 53, 50, 48, 52], dtype=float)
+    # Lag 2: perfect correlation with 2-period lag
+    ref_lag2 = np.array([100, 100, 110, 110, 120, 120, 130, 130, 140, 140, 150, 150, 160, 160, 170], dtype=float)
+    comp_lag2 = np.array([50, 50, 50, 50, 55, 55, 60, 60, 65, 65, 70, 70, 75, 75, 80], dtype=float)
+    # Lag 1: perfect correlation with 1-period lag
+    ref_lag1 = np.array([100, 110, 110, 120, 120, 130, 130, 140, 140, 150, 150, 160, 160, 170, 170], dtype=float)
+    comp_lag1 = np.array([50, 50, 55, 55, 60, 60, 65, 65, 70, 70, 75, 75, 80, 80, 85], dtype=float)
 
+    def test_positive_correlation(self):
         result = get_relationship_narrative(
-            reference_years=years,
-            reference_values=ref_values,
-            comparison_years=years,
-            comparison_values=comp_values,
+            reference_years=self.periods_10,
+            reference_values=self.ref_lag0_pos,
+            comparison_years=self.periods_10,
+            comparison_values=self.comp_lag0_pos,
             reference_name="spending",
             comparison_name="outcome",
             correlation_threshold=8,
@@ -518,16 +533,11 @@ class TestRelationshipNarrativeLaggedCorrelation:
         )
 
     def test_negative_correlation(self):
-        years = np.arange(2010, 2020)
-        # Data designed so percentage changes are negatively correlated
-        ref_values = np.array([100, 110, 115, 130, 140, 145, 160, 175, 180, 200], dtype=float)
-        comp_values = np.array([100, 95, 93, 85, 80, 78, 70, 62, 60, 50], dtype=float)
-
         result = get_relationship_narrative(
-            reference_years=years,
-            reference_values=ref_values,
-            comparison_years=years,
-            comparison_values=comp_values,
+            reference_years=self.periods_10,
+            reference_values=self.ref_lag0_neg,
+            comparison_years=self.periods_10,
+            comparison_values=self.comp_lag0_neg,
             reference_name="spending",
             comparison_name="outcome",
             correlation_threshold=8,
@@ -544,15 +554,11 @@ class TestRelationshipNarrativeLaggedCorrelation:
         )
 
     def test_insignificant_correlation(self):
-        years = np.arange(2010, 2020)
-        ref_values = np.array([100, 105, 102, 108, 104, 110, 106, 112, 108, 114], dtype=float)
-        comp_values = np.array([50, 48, 52, 49, 51, 47, 53, 50, 48, 52], dtype=float)
-
         result = get_relationship_narrative(
-            reference_years=years,
-            reference_values=ref_values,
-            comparison_years=years,
-            comparison_values=comp_values,
+            reference_years=self.periods_10,
+            reference_values=self.ref_lag0_insig,
+            comparison_years=self.periods_10,
+            comparison_values=self.comp_lag0_insig,
             reference_name="spending",
             comparison_name="outcome",
             correlation_threshold=8,
@@ -572,7 +578,6 @@ class TestRelationshipNarrativeLaggedCorrelation:
         years = np.array([2010, 2012, 2015, 2018])
         ref_values = np.array([100, 110, 125, 140], dtype=float)
         comp_values = np.array([50, 55, 62, 70], dtype=float)
-
         result = get_relationship_narrative(
             reference_years=years,
             reference_values=ref_values,
@@ -590,7 +595,6 @@ class TestRelationshipNarrativeLaggedCorrelation:
         ref_values = np.array([100, 108, 120, 128, 145, 152, 168, 175], dtype=float)
         comp_years = np.arange(2010, 2021)
         comp_values = np.array([50, 53, 56, 60, 64, 68, 72, 76, 81, 86, 92], dtype=float)
-
         result = get_relationship_narrative(
             reference_years=ref_years,
             reference_values=ref_values,
@@ -604,18 +608,11 @@ class TestRelationshipNarrativeLaggedCorrelation:
 
     def test_lagged_effect_detection(self):
         """Test that lagged effects can be detected."""
-        ref_years = np.arange(2010, 2025)
-        comp_years = np.arange(2010, 2025)
-        # Reference increases in specific years
-        ref_values = np.array([100, 100, 110, 110, 120, 120, 130, 130, 140, 140, 150, 150, 160, 160, 170], dtype=float)
-        # Comparison follows reference pattern with 2-year lag
-        comp_values = np.array([50, 50, 50, 50, 55, 55, 60, 60, 65, 65, 70, 70, 75, 75, 80], dtype=float)
-
         result = get_relationship_narrative(
-            reference_years=ref_years,
-            reference_values=ref_values,
-            comparison_years=comp_years,
-            comparison_values=comp_values,
+            reference_years=self.periods_15,
+            reference_values=self.ref_lag2,
+            comparison_years=self.periods_15,
+            comparison_values=self.comp_lag2,
             reference_name="spending",
             comparison_name="outcome",
             correlation_threshold=8,
@@ -634,6 +631,66 @@ class TestRelationshipNarrativeLaggedCorrelation:
             "This is a very strong relationship (r=1.00) and is statistically reliable (p=0.000), "
             "based on 12 year-over-year comparisons."
         )
+
+    # Time unit customization tests
+
+    def test_time_unit_month(self):
+        result = get_relationship_narrative(
+            reference_years=self.periods_15,
+            reference_values=self.ref_lag2,
+            comparison_years=self.periods_15,
+            comparison_values=self.comp_lag2,
+            reference_name="spending",
+            comparison_name="outcome",
+            correlation_threshold=8,
+            time_unit="month",
+        )
+        assert result["method"] == "lagged_correlation"
+        assert "2 months later" in result["narrative"]
+        assert "month-over-month comparisons" in result["narrative"]
+
+    def test_time_unit_quarter(self):
+        result = get_relationship_narrative(
+            reference_years=self.periods_15,
+            reference_values=self.ref_lag2,
+            comparison_years=self.periods_15,
+            comparison_values=self.comp_lag2,
+            reference_name="spending",
+            comparison_name="outcome",
+            correlation_threshold=8,
+            time_unit="quarter",
+        )
+        assert result["method"] == "lagged_correlation"
+        assert "2 quarters later" in result["narrative"]
+        assert "quarter-over-quarter comparisons" in result["narrative"]
+
+    def test_time_unit_lag_one_singular(self):
+        result = get_relationship_narrative(
+            reference_years=self.periods_15,
+            reference_values=self.ref_lag1,
+            comparison_years=self.periods_15,
+            comparison_values=self.comp_lag1,
+            reference_name="spending",
+            comparison_name="outcome",
+            correlation_threshold=8,
+            time_unit="month",
+        )
+        assert result["method"] == "lagged_correlation"
+        assert "1 month later" in result["narrative"]
+
+    def test_time_unit_same_period(self):
+        result = get_relationship_narrative(
+            reference_years=self.periods_10,
+            reference_values=self.ref_lag0_pos,
+            comparison_years=self.periods_10,
+            comparison_values=self.comp_lag0_pos,
+            reference_name="spending",
+            comparison_name="outcome",
+            correlation_threshold=8,
+            time_unit="quarter",
+        )
+        assert result["method"] == "lagged_correlation"
+        assert "in the same quarter" in result["narrative"]
 
 
 # ---------------------------------------------------------------------------

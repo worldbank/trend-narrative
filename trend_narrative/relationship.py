@@ -399,6 +399,11 @@ def _build_comovement_narrative(
     return narrative
 
 
+def _pluralize(word: str, count: int) -> str:
+    """Return plural form if count != 1."""
+    return word if count == 1 else f"{word}s"
+
+
 def _build_lagged_correlation_narrative(
     best_lag: dict,
     all_lags: list[dict],
@@ -406,6 +411,7 @@ def _build_lagged_correlation_narrative(
     max_lag_tested: int,
     reference_name: str,
     comparison_name: str,
+    time_unit: str = "year",
 ) -> str:
     """Build narrative from lagged correlation analysis."""
     correlation = best_lag["correlation"]
@@ -418,9 +424,9 @@ def _build_lagged_correlation_narrative(
 
     # Build lag timing description
     if lag == 0:
-        timing = "in the same year"
+        timing = f"in the same {time_unit}"
     else:
-        timing = f"about {lag} year{'s' if lag > 1 else ''} later"
+        timing = f"about {lag} {_pluralize(time_unit, lag)} later"
 
     if strength == "no" or not is_significant:
         # Not significant: lead with uncertainty
@@ -437,7 +443,7 @@ def _build_lagged_correlation_narrative(
         else:
             narrative += (
                 f"Changes in one do not appear to be associated with changes in the other "
-                f"at any lag tested (0-{max_lag_tested} years)."
+                f"at any lag tested (0-{max_lag_tested} {time_unit}s)."
             )
     else:
         # Significant: lead with the finding
@@ -447,7 +453,7 @@ def _build_lagged_correlation_narrative(
             f"{direction_word} {timing}. "
             f"This is a {strength} relationship (r={correlation:.2f}) "
             f"and is statistically reliable (p={p_value:.3f}), "
-            f"based on {n_pairs} year-over-year comparisons."
+            f"based on {n_pairs} {time_unit}-over-{time_unit} comparisons."
         )
 
     return narrative
@@ -465,6 +471,7 @@ def get_relationship_narrative(
     max_lag_cap: int = DEFAULT_MAX_LAG_CAP,
     reference_format: str = ".2f",
     comparison_format: str = ".2f",
+    time_unit: str = "year",
 ) -> dict:
     """
     Analyze relationship between two time series.
@@ -503,6 +510,8 @@ def get_relationship_narrative(
         Format spec for reference series values in narratives (default ".2f").
     comparison_format : str
         Format spec for comparison series values in narratives (default ".2f").
+    time_unit : str
+        Time unit label for narratives (default "year"). Use "month", "quarter", etc.
 
     Returns
     -------
@@ -569,7 +578,7 @@ def get_relationship_narrative(
 
             narrative = _build_lagged_correlation_narrative(
                 best_lag, lag_results, n_sparse, max_lag,
-                reference_name, comparison_name
+                reference_name, comparison_name, time_unit
             )
 
             return {
