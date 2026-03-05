@@ -449,12 +449,9 @@ class TestRelationshipNarrativeLaggedCorrelation:
         assert result["best_lag"]["p_value"] == pytest.approx(0.0, abs=0.001)
         assert result["best_lag"]["n_pairs"] == 9
         assert result["narrative"] == (
-            "Year-on-year changes in spending and outcome show the strongest association "
-            "contemporaneously (no lag), with a very strong positive correlation "
-            "(r=0.97, p=0.000, n=9 change pairs), which is statistically significant. "
             "When spending increases, outcome tends to increase in the same year. "
-            "This analysis is based on 10 observations and assumes approximately "
-            "linear change between data points."
+            "This is a very strong relationship (r=0.97) and is statistically reliable (p=0.000), "
+            "based on 9 year-over-year comparisons."
         )
 
     def test_negative_correlation(self):
@@ -479,12 +476,9 @@ class TestRelationshipNarrativeLaggedCorrelation:
         assert result["best_lag"]["p_value"] == pytest.approx(0.0, abs=0.001)
         assert result["best_lag"]["n_pairs"] == 9
         assert result["narrative"] == (
-            "Year-on-year changes in spending and outcome show the strongest association "
-            "contemporaneously (no lag), with a very strong negative correlation "
-            "(r=-0.96, p=0.000, n=9 change pairs), which is statistically significant. "
             "When spending increases, outcome tends to decrease in the same year. "
-            "This analysis is based on 10 observations and assumes approximately "
-            "linear change between data points."
+            "This is a very strong relationship (r=-0.96) and is statistically reliable (p=0.000), "
+            "based on 9 year-over-year comparisons."
         )
 
     def test_insignificant_correlation(self):
@@ -509,12 +503,9 @@ class TestRelationshipNarrativeLaggedCorrelation:
         assert result["best_lag"]["p_value"] == pytest.approx(0.118, rel=0.01)
         assert result["best_lag"]["n_pairs"] == 9
         assert result["narrative"] == (
-            "Year-on-year changes in spending and outcome show the strongest association "
-            "contemporaneously (no lag), with a strong negative correlation "
-            "(r=-0.56, p=0.118, n=9 change pairs), which is not statistically significant. "
-            "When spending increases, outcome tends to decrease in the same year. "
-            "This analysis is based on 10 observations and assumes approximately "
-            "linear change between data points."
+            "No reliable relationship was detected between changes in spending and outcome. "
+            "While the data suggests a strong negative pattern (r=-0.56), this could be due to chance "
+            "given the limited sample size (n=9 change pairs, p=0.12)."
         )
 
     def test_falls_back_to_comovement_below_threshold(self):
@@ -585,12 +576,9 @@ class TestRelationshipNarrativeLaggedCorrelation:
         assert len(result["all_lags"]) == 6
         assert result["max_lag_tested"] == 5
         assert result["narrative"] == (
-            "Year-on-year changes in spending and outcome show the strongest association "
-            "with a 2-year lag, with a very strong positive correlation "
-            "(r=1.00, p=0.000, n=12 change pairs), which is statistically significant. "
             "When spending increases, outcome tends to increase about 2 years later. "
-            "This analysis is based on 15 observations and assumes approximately "
-            "linear change between data points."
+            "This is a very strong relationship (r=1.00) and is statistically reliable (p=0.000), "
+            "based on 12 year-over-year comparisons."
         )
 
 

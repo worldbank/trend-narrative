@@ -30,6 +30,7 @@ CORRELATION_THRESHOLDS = {
 THRESHOLD_LOW = 3  # Minimum for any analysis (need 2+ changes to compare)
 DEFAULT_CORRELATION_THRESHOLD = 5  # Minimum for correlation (need enough change pairs)
 DEFAULT_MAX_LAG_CAP = 5  # Domain-appropriate limit for policy effects
+P_THRESHOLD = 0.10  # Threshold for statistical significance
 
 
 def get_direction(values: np.ndarray) -> str:
@@ -231,13 +232,13 @@ def compute_all_lagged_correlations(
     return results
 
 
-def find_best_lag(lag_results: list[dict], p_threshold: float = 0.10) -> Optional[dict]:
+def find_best_lag(lag_results: list[dict]) -> Optional[dict]:
     """Find the lag with strongest correlation, preferring significant results."""
     if not lag_results:
         return None
 
     # Prefer significant results
-    significant = [r for r in lag_results if r["p_value"] < p_threshold]
+    significant = [r for r in lag_results if r["p_value"] < P_THRESHOLD]
     candidates = significant if significant else lag_results
 
     return max(candidates, key=lambda x: abs(x["correlation"]))
@@ -329,64 +330,41 @@ def _build_lagged_correlation_narrative(
     n_pairs = best_lag["n_pairs"]
 
     strength = get_correlation_strength(correlation)
-    direction = "positive" if correlation > 0 else "negative"
+    is_significant = p_value < P_THRESHOLD
 
-    # Lag description
+    # Build lag timing description
     if lag == 0:
-        lag_desc = "contemporaneously (no lag)"
+        timing = "in the same year"
     else:
-        lag_desc = f"with a {lag}-year lag"
+        timing = f"about {lag} year{'s' if lag > 1 else ''} later"
 
-    if strength == "no":
+    if strength == "no" or not is_significant:
+        # Not significant: lead with uncertainty
         narrative = (
-            f"Year-on-year changes in {reference_name} and {comparison_name} "
-            f"show no significant correlation at any lag tested (0-{max_lag_tested} years), "
-            "suggesting changes in one are not associated with changes in the other."
+            f"No reliable relationship was detected between changes in {reference_name} "
+            f"and {comparison_name}. "
         )
+        if strength != "no":
+            narrative += (
+                f"While the data suggests a {strength} {'positive' if correlation > 0 else 'negative'} "
+                f"pattern (r={correlation:.2f}), this could be due to chance "
+                f"given the limited sample size (n={n_pairs} change pairs, p={p_value:.2f})."
+            )
+        else:
+            narrative += (
+                f"Changes in one do not appear to be associated with changes in the other "
+                f"at any lag tested (0-{max_lag_tested} years)."
+            )
     else:
-        if p_value < 0.05:
-            significance = "statistically significant"
-        elif p_value < 0.10:
-            significance = "marginally significant"
-        else:
-            significance = "not statistically significant"
-
+        # Significant: lead with the finding
+        direction_word = "increase" if correlation > 0 else "decrease"
         narrative = (
-            f"Year-on-year changes in {reference_name} and {comparison_name} "
-            f"show the strongest association {lag_desc}, "
-            f"with a {strength} {direction} correlation "
-            f"(r={correlation:.2f}, p={p_value:.3f}, n={n_pairs} change pairs), "
-            f"which is {significance}. "
+            f"When {reference_name} increases, {comparison_name} tends to "
+            f"{direction_word} {timing}. "
+            f"This is a {strength} relationship (r={correlation:.2f}) "
+            f"and is statistically reliable (p={p_value:.3f}), "
+            f"based on {n_pairs} year-over-year comparisons."
         )
-
-        if lag > 0:
-            if correlation > 0:
-                narrative += (
-                    f"When {reference_name} increases, {comparison_name} tends to "
-                    f"increase about {lag} year{'s' if lag > 1 else ''} later."
-                )
-            else:
-                narrative += (
-                    f"When {reference_name} increases, {comparison_name} tends to "
-                    f"decrease about {lag} year{'s' if lag > 1 else ''} later."
-                )
-        else:
-            if correlation > 0:
-                narrative += (
-                    f"When {reference_name} increases, {comparison_name} tends to "
-                    f"increase in the same year."
-                )
-            else:
-                narrative += (
-                    f"When {reference_name} increases, {comparison_name} tends to "
-                    f"decrease in the same year."
-                )
-
-    # Add data limitation note
-    narrative += (
-        f" This analysis is based on {n_sparse} observations and assumes "
-        "approximately linear change between data points."
-    )
 
     return narrative
 
