@@ -123,44 +123,80 @@ def interpolate_at_years(
     )
 
 
+def _get_boundary_value(
+    target_year: float,
+    comparison_years: np.ndarray,
+    comparison_values: np.ndarray,
+    seg_values_sorted: np.ndarray,
+    use_first: bool,
+) -> tuple[Optional[float], bool]:
+    """Get comparison value at a segment boundary.
+
+    Returns (value, is_interpolated). Tries in order:
+    1. Exact match in data
+    2. Interpolation from full series
+    3. Fallback to first/last point within segment
+    """
+    if target_year in comparison_years:
+        idx = np.where(comparison_years == target_year)[0][0]
+        return float(comparison_values[idx]), False
+
+    interpolated = interpolate_at_years(
+        comparison_years, comparison_values, np.array([target_year])
+    )[0]
+    if not np.isnan(interpolated):
+        return float(interpolated), True
+
+    if len(seg_values_sorted) > 0:
+        return float(seg_values_sorted[0] if use_first else seg_values_sorted[-1]), False
+
+    return None, False
+
+
 def analyze_segment_comovement(
     segment: dict,
     comparison_years: np.ndarray,
     comparison_values: np.ndarray,
 ) -> dict:
-    """Analyze comparison series within a single reference segment."""
+    """Analyze comparison series within a single reference segment.
+
+    Uses interpolation to estimate comparison values at segment boundaries,
+    ensuring direction is measured over the same time span as the reference.
+    Falls back to actual data points if interpolation fails.
+    """
     start_year = segment["start_year"]
     end_year = segment["end_year"]
 
+    # Get actual observations within segment (sorted)
     mask = (comparison_years >= start_year) & (comparison_years <= end_year)
-    seg_years = comparison_years[mask]
-    seg_values = comparison_values[mask]
+    seg_values_sorted = comparison_values[mask][np.argsort(comparison_years[mask])]
+    n_points = len(seg_values_sorted)
 
-    n_points = len(seg_values)
+    # Get boundary values
+    comp_start, start_interp = _get_boundary_value(
+        start_year, comparison_years, comparison_values, seg_values_sorted, use_first=True
+    )
+    comp_end, end_interp = _get_boundary_value(
+        end_year, comparison_years, comparison_values, seg_values_sorted, use_first=False
+    )
 
-    result = {
+    # Need two distinct values to determine direction
+    can_calc_direction = (
+        comp_start is not None and
+        comp_end is not None and
+        comp_start != comp_end
+    )
+
+    return {
         "start_year": int(start_year),
         "end_year": int(end_year),
         "reference_direction": get_direction_from_slope(segment["slope"]),
         "comparison_n_points": n_points,
+        "comparison_direction": get_direction(np.array([comp_start, comp_end])) if can_calc_direction else None,
+        "comparison_start": comp_start,
+        "comparison_end": comp_end,
+        "interpolated": start_interp and end_interp,
     }
-
-    if n_points == 0:
-        result["comparison_direction"] = None
-        result["comparison_start"] = None
-        result["comparison_end"] = None
-    elif n_points == 1:
-        result["comparison_direction"] = None
-        result["comparison_start"] = float(seg_values[0])
-        result["comparison_end"] = float(seg_values[0])
-    else:
-        sorted_idx = np.argsort(seg_years)
-        seg_values_sorted = seg_values[sorted_idx]
-        result["comparison_direction"] = get_direction(seg_values_sorted)
-        result["comparison_start"] = float(seg_values_sorted[0])
-        result["comparison_end"] = float(seg_values_sorted[-1])
-
-    return result
 
 
 def compute_lagged_correlation(
@@ -322,9 +358,8 @@ def _build_comovement_narrative(
                     f"({seg['comparison_start']:.2f} to {seg['comparison_end']:.2f})"
                 )
 
-        # Capitalize first letter for first segment
-        if i == 0:
-            seg_narrative = seg_narrative[0].upper() + seg_narrative[1:]
+        # Capitalize first letter (each segment becomes a sentence)
+        seg_narrative = seg_narrative[0].upper() + seg_narrative[1:]
 
         narratives.append(seg_narrative)
 

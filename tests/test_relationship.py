@@ -277,7 +277,8 @@ class TestFindBestLag:
 # ---------------------------------------------------------------------------
 
 class TestAnalyzeSegmentComovement:
-    def test_both_increasing(self):
+    def test_both_increasing_fallback(self):
+        """Falls back to actual data points when interpolation fails."""
         segment = _seg(2010, 2015, slope=5)
         comp_years = np.array([2011, 2014])
         comp_values = np.array([50, 70])
@@ -285,6 +286,36 @@ class TestAnalyzeSegmentComovement:
         assert result["reference_direction"] == "increased"
         assert result["comparison_direction"] == "increased"
         assert result["comparison_n_points"] == 2
+        assert result["comparison_start"] == 50
+        assert result["comparison_end"] == 70
+        assert result["interpolated"] is False
+
+    def test_both_increasing_interpolated(self):
+        """Uses interpolation when comparison data spans segment boundaries."""
+        segment = _seg(2010, 2015, slope=5)
+        comp_years = np.array([2008, 2012, 2018])
+        comp_values = np.array([40, 60, 100])
+        result = analyze_segment_comovement(segment, comp_years, comp_values)
+        assert result["reference_direction"] == "increased"
+        assert result["comparison_direction"] == "increased"
+        assert result["comparison_n_points"] == 1
+        # Interpolated at 2010: 40 + (60-40)/(2012-2008)*(2010-2008) = 50
+        # Interpolated at 2015: 60 + (100-60)/(2018-2012)*(2015-2012) = 80
+        assert result["comparison_start"] == pytest.approx(50, rel=0.01)
+        assert result["comparison_end"] == pytest.approx(80, rel=0.01)
+        assert result["interpolated"] is True
+
+    def test_exact_boundary_matches(self):
+        """When comparison data exists at exact segment boundaries, not interpolated."""
+        segment = _seg(2010, 2015, slope=5)
+        comp_years = np.array([2010, 2012, 2015])
+        comp_values = np.array([50, 60, 70])
+        result = analyze_segment_comovement(segment, comp_years, comp_values)
+        assert result["reference_direction"] == "increased"
+        assert result["comparison_direction"] == "increased"
+        assert result["comparison_start"] == 50
+        assert result["comparison_end"] == 70
+        assert result["interpolated"] is False
 
     def test_opposite_directions(self):
         segment = _seg(2010, 2015, slope=5)
@@ -293,6 +324,7 @@ class TestAnalyzeSegmentComovement:
         result = analyze_segment_comovement(segment, comp_years, comp_values)
         assert result["reference_direction"] == "increased"
         assert result["comparison_direction"] == "decreased"
+        assert result["interpolated"] is False
 
     def test_no_comparison_data_in_segment(self):
         segment = _seg(2010, 2015, slope=5)
@@ -301,6 +333,7 @@ class TestAnalyzeSegmentComovement:
         result = analyze_segment_comovement(segment, comp_years, comp_values)
         assert result["comparison_direction"] is None
         assert result["comparison_n_points"] == 0
+        assert result["interpolated"] is False
 
     def test_single_comparison_point(self):
         segment = _seg(2010, 2015, slope=5)
@@ -310,6 +343,7 @@ class TestAnalyzeSegmentComovement:
         assert result["comparison_direction"] is None
         assert result["comparison_n_points"] == 1
         assert result["comparison_start"] == 55
+        assert result["interpolated"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -370,9 +404,11 @@ class TestRelationshipNarrativeComovement:
             comparison_name="UHC index",
         )
         assert result["method"] == "comovement"
-        assert "health spending" in result["narrative"]
-        assert "UHC index" in result["narrative"]
-        assert "same direction" in result["narrative"]
+        assert result["narrative"] == (
+            "From 2010 to 2020, health spending increased while UHC index increased "
+            "(50.00 to 80.00), both moving in the same direction. "
+            "With only 3 UHC index observations, a statistical relationship cannot be established."
+        )
 
     def test_single_segment_opposite_directions(self):
         ref_years = np.array([2010, 2015, 2020])
@@ -388,7 +424,11 @@ class TestRelationshipNarrativeComovement:
             comparison_name="outcome",
         )
         assert result["method"] == "comovement"
-        assert "opposite" in result["narrative"]
+        assert result["narrative"] == (
+            "From 2010 to 2020, spending increased while outcome decreased "
+            "(80.00 to 50.00), moving in opposite directions. "
+            "With only 3 outcome observations, a statistical relationship cannot be established."
+        )
 
     def test_multiple_segments(self):
         ref_years = np.array([2010, 2015, 2020])
@@ -410,21 +450,14 @@ class TestRelationshipNarrativeComovement:
         )
         assert result["method"] == "comovement"
         assert len(result["segment_details"]) == 2
-
-    def test_caveat_about_limited_data(self):
-        ref_years = np.array([2010, 2015, 2020])
-        ref_values = np.array([100, 125, 150])
-        comp_years = np.array([2012, 2015, 2018])
-        comp_values = np.array([50, 65, 80])
-        result = get_relationship_narrative(
-            reference_years=ref_years,
-            reference_values=ref_values,
-            comparison_years=comp_years,
-            comparison_values=comp_values,
-            reference_name="spending",
-            comparison_name="outcome",
+        # Values are interpolated at segment boundaries (2015 → 62.50)
+        assert result["narrative"] == (
+            "From 2010 to 2015, spending increased while outcome increased "
+            "(50.00 to 62.50), both moving in the same direction. "
+            "From 2015 to 2020, spending decreased while outcome increased "
+            "(62.50 to 70.00), moving in opposite directions. "
+            "With only 4 outcome observations, a statistical relationship cannot be established."
         )
-        assert "statistical relationship cannot be established" in result["narrative"]
 
     def test_segment_with_no_comparison_data(self):
         ref_years = np.array([2010, 2015, 2020])
@@ -445,7 +478,12 @@ class TestRelationshipNarrativeComovement:
             reference_segments=segments,
         )
         assert result["method"] == "comovement"
-        assert "unavailable" in result["narrative"]
+        assert result["narrative"] == (
+            "From 2010 to 2015, spending increased while outcome increased "
+            "(50.00 to 60.00), both moving in the same direction. "
+            "From 2015 to 2020, spending decreased, but outcome data is unavailable for this period. "
+            "With only 3 outcome observations, a statistical relationship cannot be established."
+        )
 
 
 # ---------------------------------------------------------------------------
