@@ -13,10 +13,12 @@ Supports two analysis modes based on data availability:
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Optional, Union
 
 import numpy as np
 from scipy import stats
+
+Formatter = Union[str, Callable[[float], str]]
 
 
 CORRELATION_THRESHOLDS = {
@@ -311,8 +313,10 @@ def _insufficient_data_result(
     }
 
 
-def _format_value(value: float, fmt: str) -> str:
-    """Format a numeric value using the given format spec."""
+def _format_value(value: float, fmt: Formatter) -> str:
+    """Format a numeric value using the given format spec or callable."""
+    if callable(fmt):
+        return fmt(value)
     return f"{value:{fmt}}"
 
 
@@ -320,8 +324,8 @@ def _build_comovement_narrative(
     segment_details: list[dict],
     reference_name: str,
     comparison_name: str,
-    reference_format: str = ".2f",
-    comparison_format: str = ".2f",
+    reference_format: Formatter = ".2f",
+    comparison_format: Formatter = ".2f",
 ) -> str:
     """Build narrative from segment-level co-movement analysis."""
     if not segment_details:
@@ -492,8 +496,8 @@ def get_relationship_narrative(
     reference_segments: Optional[list[dict]] = None,
     correlation_threshold: int = DEFAULT_CORRELATION_THRESHOLD,
     max_lag_cap: int = DEFAULT_MAX_LAG_CAP,
-    reference_format: str = ".2f",
-    comparison_format: str = ".2f",
+    reference_format: Formatter = ".2f",
+    comparison_format: Formatter = ".2f",
     time_unit: str = "year",
 ) -> dict:
     """
@@ -529,10 +533,11 @@ def get_relationship_narrative(
     max_lag_cap : int
         Maximum lag to test in years (default 5). Actual max lag may be
         lower if data is insufficient.
-    reference_format : str
-        Format spec for reference series values in narratives (default ".2f").
-    comparison_format : str
-        Format spec for comparison series values in narratives (default ".2f").
+    reference_format : str or callable
+        Format spec (e.g., ".2f") or callable (e.g., lambda x: f"${x:,.0f}")
+        for reference series values in narratives. Default ".2f".
+    comparison_format : str or callable
+        Format spec or callable for comparison series values. Default ".2f".
     time_unit : str
         Time unit label for narratives (default "year"). Use "month", "quarter", etc.
 

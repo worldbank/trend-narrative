@@ -945,3 +945,21 @@ class TestRelationshipNarrativeNumberFormatting:
         )
         assert "(1,001 to 1,500)" in result["narrative"]
         assert "(50.5% to 80.2%)" in result["narrative"]
+
+    def test_callable_formatter(self):
+        """Callable formatters should work for custom formatting like currency."""
+        def currency_fmt(x):
+            if x >= 1000:
+                return f"USD {x/1000:.1f}K"
+            return f"USD {x:.0f}"
+
+        result = get_relationship_narrative(
+            reference_years=self.ref_years,
+            reference_values=self.ref_values,
+            comparison_years=self.comp_years,
+            comparison_values=self.comp_values,
+            reference_name="spending",
+            comparison_name="outcome",
+            reference_format=currency_fmt,
+        )
+        assert "(USD 1.0K to USD 1.5K)" in result["narrative"]
