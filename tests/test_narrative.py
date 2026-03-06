@@ -252,3 +252,33 @@ class TestGetSegmentNarrativePath2:
         )
         # Should not mention 1900 or the dummy negative slope
         assert "1900" not in text
+
+
+# ---------------------------------------------------------------------------
+# get_segment_narrative – insufficient data handling
+# ---------------------------------------------------------------------------
+
+class TestGetSegmentNarrativeInsufficientData:
+    """Returns empty string when fewer than 2 data points."""
+
+    def test_empty_array_via_extractor(self):
+        x = np.array([], dtype=float)
+        y = np.array([], dtype=float)
+        extractor = InsightExtractor(x, y)
+        text = get_segment_narrative(extractor=extractor, metric="spending")
+        assert text == ""
+
+    def test_single_point_via_extractor(self):
+        x = np.array([2020], dtype=float)
+        y = np.array([100], dtype=float)
+        extractor = InsightExtractor(x, y)
+        text = get_segment_narrative(extractor=extractor, metric="spending")
+        assert text == ""
+
+    def test_precomputed_with_n_points_zero(self):
+        text = get_segment_narrative(segments=[], cv_value=0.0, n_points=0, metric="spending")
+        assert text == ""
+
+    def test_precomputed_with_n_points_one(self):
+        text = get_segment_narrative(segments=[], cv_value=0.0, n_points=1, metric="spending")
+        assert text == ""

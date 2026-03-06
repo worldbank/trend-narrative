@@ -116,8 +116,11 @@ class InsightExtractor:
             Coefficient of Variation (%).
         segments : list[dict]
             Piecewise-linear segment statistics.
+        n_points : int
+            Number of data points in the series.
         """
         return {
             "cv_value": self.get_volatility(),
             "segments": self.get_structural_segments(),
+            "n_points": len(self.x),
         }

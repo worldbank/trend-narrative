@@ -95,6 +95,12 @@ class TestExtractFullSuite:
         result = InsightExtractor(x, y).extract_full_suite()
         assert "cv_value" in result
         assert "segments" in result
+        assert "n_points" in result
+
+    def test_n_points_correct(self, stable_series):
+        x, y = stable_series
+        result = InsightExtractor(x, y).extract_full_suite()
+        assert result["n_points"] == len(x)
 
     def test_cv_value_is_numeric(self, stable_series):
         x, y = stable_series

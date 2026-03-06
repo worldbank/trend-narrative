@@ -128,6 +128,7 @@ def get_segment_narrative(
     cv_value: Optional[float] = None,
     metric: str = "expenditure",
     extractor: Optional["InsightExtractor"] = None,
+    n_points: Optional[int] = None,
 ) -> str:
     """Generate a plain-English narrative from trend data.
 
@@ -171,6 +172,9 @@ def get_segment_narrative(
     extractor : InsightExtractor, optional
         A configured :class:`InsightExtractor` instance (Path 2).
         ``extract_full_suite()`` is called internally.
+    n_points : int, optional
+        Number of data points (Path 1). If fewer than 2, returns empty
+        string. Automatically inferred when using extractor path.
 
     Returns
     -------
@@ -187,6 +191,7 @@ def get_segment_narrative(
         suite = extractor.extract_full_suite()
         segments = suite["segments"]
         cv_value = suite["cv_value"]
+        n_points = suite["n_points"]
 
     # --- Validate Path 1 inputs ---
     elif segments is None or cv_value is None:
@@ -194,6 +199,10 @@ def get_segment_narrative(
             "Provide either an InsightExtractor via extractor=, "
             "or precomputed data via segments= and cv_value=."
         )
+
+    # --- Insufficient data: return empty narrative ---
+    if n_points is not None and n_points < 2:
+        return ""
 
     return _build_narrative(segments, cv_value, metric)
 
