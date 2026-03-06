@@ -382,21 +382,52 @@ class TestAnalyzeSegmentComovement:
 # ---------------------------------------------------------------------------
 
 class TestRelationshipNarrativeInsufficientData:
+    years = np.array([2010, 2020])
+    values = np.array([100, 150])
+    enough_years = np.array([2010, 2011, 2012, 2013, 2014, 2015, 2016])
+    enough_values = np.array([50, 58, 62, 72, 75, 88, 90], dtype=float)
+    empty_years = np.array([], dtype=float)
+    empty_values = np.array([], dtype=float)
+    expected_narrative = (
+        "The relationship between spending and outcome cannot be "
+        "determined due to limited data availability."
+    )
+
     def test_too_few_comparison_points(self):
-        ref_years = np.array([2010, 2015, 2020])
-        ref_values = np.array([100, 125, 150])
-        comp_years = np.array([2012, 2015])
-        comp_values = np.array([50, 60])
         result = get_relationship_narrative(
-            reference_years=ref_years,
-            reference_values=ref_values,
-            comparison_years=comp_years,
-            comparison_values=comp_values,
+            reference_years=self.years,
+            reference_values=self.values,
+            comparison_years=self.years,
+            comparison_values=self.values,
             reference_name="spending",
             comparison_name="outcome",
         )
         assert result["method"] == "insufficient_data"
-        assert "limited data" in result["narrative"].lower()
+        assert result["narrative"] == self.expected_narrative
+
+    def test_empty_comparison_array(self):
+        result = get_relationship_narrative(
+            reference_years=self.enough_years,
+            reference_values=self.enough_values,
+            comparison_years=self.empty_years,
+            comparison_values=self.empty_values,
+            reference_name="spending",
+            comparison_name="outcome",
+        )
+        assert result["method"] == "insufficient_data"
+        assert result["narrative"] == self.expected_narrative
+
+    def test_empty_reference_array(self):
+        result = get_relationship_narrative(
+            reference_years=self.empty_years,
+            reference_values=self.empty_values,
+            comparison_years=self.enough_years,
+            comparison_values=self.enough_values,
+            reference_name="spending",
+            comparison_name="outcome",
+        )
+        assert result["method"] == "insufficient_data"
+        assert result["narrative"] == self.expected_narrative
 
 
 # ---------------------------------------------------------------------------
