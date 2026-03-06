@@ -694,22 +694,77 @@ class TestRelationshipNarrativeLaggedCorrelation:
         assert result["best_lag"] is None
         assert result["all_lags"] is None
 
-    def test_symmetric_reference_sparser_than_comparison(self):
-        """When reference has fewer points than comparison, use reference to define periods."""
-        ref_years = np.array([2010, 2011, 2013, 2014, 2016, 2017, 2019, 2020])
-        ref_values = np.array([100, 108, 120, 128, 145, 152, 168, 175], dtype=float)
-        comp_years = np.arange(2010, 2021)
-        comp_values = np.array([50, 53, 56, 60, 64, 68, 72, 76, 81, 86, 92], dtype=float)
+    def test_reference_sparser_narrative_reflects_comparison_leading(self):
+        """When reference is sparser, narrative says comparison leads reference."""
+        # Reference has 5 points, comparison has 10.
+        # Reference is sparser, so narrative says "comparison leads reference".
         result = get_relationship_narrative(
-            reference_years=ref_years,
-            reference_values=ref_values,
-            comparison_years=comp_years,
-            comparison_values=comp_values,
+            reference_years=self.periods_10[:5],
+            reference_values=self.ref_lag0_pos[:5],
+            comparison_years=self.periods_10,
+            comparison_values=self.comp_lag0_pos,
             reference_name="spending",
             comparison_name="outcome",
-            correlation_threshold=8,
+            correlation_threshold=5,
         )
         assert result["method"] == "lagged_correlation"
+        assert "When outcome increases" in result["narrative"]
+        assert "spending tends to" in result["narrative"]
+
+    def test_comparison_sparser_narrative_reflects_reference_leading(self):
+        """When comparison is sparser, narrative says reference leads comparison."""
+        # Reference has 10 points, comparison has 5.
+        # Comparison is sparser, so narrative says "reference leads comparison".
+        result = get_relationship_narrative(
+            reference_years=self.periods_10,
+            reference_values=self.ref_lag0_pos,
+            comparison_years=self.periods_10[:5],
+            comparison_values=self.comp_lag0_pos[:5],
+            reference_name="spending",
+            comparison_name="outcome",
+            correlation_threshold=5,
+        )
+        assert result["method"] == "lagged_correlation"
+        assert "When spending increases" in result["narrative"]
+        assert "outcome tends to" in result["narrative"]
+
+    def test_reference_leads_override_true(self):
+        """User can force reference_leads=True even when reference is sparser."""
+        # Reference has 5 points, comparison has 10 (reference is sparser).
+        # Without override, narrative would say "comparison leads reference".
+        # With reference_leads=True, narrative says "reference leads comparison".
+        result = get_relationship_narrative(
+            reference_years=self.periods_10[:5],
+            reference_values=self.ref_lag0_pos[:5],
+            comparison_years=self.periods_10,
+            comparison_values=self.comp_lag0_pos,
+            reference_name="spending",
+            comparison_name="outcome",
+            correlation_threshold=5,
+            reference_leads=True,
+        )
+        assert result["method"] == "lagged_correlation"
+        assert "When spending increases" in result["narrative"]
+        assert "outcome tends to" in result["narrative"]
+
+    def test_reference_leads_override_false(self):
+        """User can force reference_leads=False even when comparison is sparser."""
+        # Reference has 10 points, comparison has 5 (comparison is sparser).
+        # Without override, narrative would say "reference leads comparison".
+        # With reference_leads=False, narrative says "comparison leads reference".
+        result = get_relationship_narrative(
+            reference_years=self.periods_10,
+            reference_values=self.ref_lag0_pos,
+            comparison_years=self.periods_10[:5],
+            comparison_values=self.comp_lag0_pos[:5],
+            reference_name="spending",
+            comparison_name="outcome",
+            correlation_threshold=5,
+            reference_leads=False,
+        )
+        assert result["method"] == "lagged_correlation"
+        assert "When outcome increases" in result["narrative"]
+        assert "spending tends to" in result["narrative"]
 
     def test_lagged_effect_detection(self):
         """Test that lagged effects can be detected."""

@@ -433,8 +433,13 @@ def _build_lagged_correlation_narrative(
     reference_name: str,
     comparison_name: str,
     time_unit: str = "year",
+    reference_leads: bool = True,
 ) -> str:
-    """Build narrative from lagged correlation analysis."""
+    """Build narrative from lagged correlation analysis.
+
+    When reference_leads=True: "When reference increases, comparison follows"
+    When reference_leads=False: "When comparison increases, reference follows"
+    """
     correlation = best_lag["correlation"]
     p_value = best_lag["p_value"]
     lag = best_lag["lag"]
@@ -442,6 +447,12 @@ def _build_lagged_correlation_narrative(
 
     strength = get_correlation_strength(correlation)
     is_significant = p_value < P_THRESHOLD
+
+    # Determine which series leads based on computation
+    if reference_leads:
+        leader_name, follower_name = reference_name, comparison_name
+    else:
+        leader_name, follower_name = comparison_name, reference_name
 
     # Build lag timing description
     if lag == 0:
@@ -474,7 +485,7 @@ def _build_lagged_correlation_narrative(
         # Significant: lead with the finding
         direction_word = "increase" if correlation > 0 else "decrease"
         narrative = (
-            f"When {reference_name} increases, {comparison_name} tends to "
+            f"When {leader_name} increases, {follower_name} tends to "
             f"{direction_word} {timing}. "
             f"This is a {strength} relationship (r={correlation:.2f}) "
             f"and is statistically reliable (p={p_value:.3f}), "
@@ -497,6 +508,7 @@ def get_relationship_narrative(
     reference_format: Formatter = ".2f",
     comparison_format: Formatter = ".2f",
     time_unit: str = "year",
+    reference_leads: Optional[bool] = None,
 ) -> dict:
     """
     Analyze relationship between two time series.
@@ -538,6 +550,11 @@ def get_relationship_narrative(
         Format spec or callable for comparison series values. Default ".2f".
     time_unit : str
         Time unit label for narratives (default "year"). Use "month", "quarter", etc.
+    reference_leads : bool, optional
+        Controls narrative direction for lagged correlation:
+        - True: "When reference increases, comparison follows"
+        - False: "When comparison increases, reference follows"
+        - None (default): inferred from sparsity (sparser series is the follower)
 
     Returns
     -------
@@ -578,13 +595,19 @@ def get_relationship_narrative(
     n_comparison = len(comparison_values)
 
     # Correlation is limited by the sparser series; identify which is which
-    # so we can interpolate the dense series at sparse series years
+    # so we can interpolate the dense series at sparse series years.
     if n_comparison <= n_reference:
         sparse_years, sparse_values = comparison_years, comparison_values
         dense_years, dense_values = reference_years, reference_values
+        inferred_reference_leads = True  # reference is dense, so "reference leads comparison"
     else:
         sparse_years, sparse_values = reference_years, reference_values
         dense_years, dense_values = comparison_years, comparison_values
+        inferred_reference_leads = False  # comparison is dense, so "comparison leads reference"
+
+    # Use user-specified direction if provided, otherwise infer from sparsity
+    if reference_leads is None:
+        reference_leads = inferred_reference_leads
 
     n_sparse = len(sparse_years)
 
@@ -613,7 +636,8 @@ def get_relationship_narrative(
 
             narrative = _build_lagged_correlation_narrative(
                 best_lag, lag_results, n_sparse, max_lag,
-                reference_name, comparison_name, time_unit
+                reference_name, comparison_name, time_unit,
+                reference_leads=reference_leads
             )
 
             return {
