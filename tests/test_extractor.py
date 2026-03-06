@@ -133,3 +133,60 @@ class TestExtractFullSuite:
 
         assert sorted_result["cv_value"] == pytest.approx(unsorted_result["cv_value"])
         assert len(sorted_result["segments"]) == len(unsorted_result["segments"])
+
+
+# ---------------------------------------------------------------------------
+# Small dataset handling (0-3 data points)
+# ---------------------------------------------------------------------------
+
+class TestSmallDatasetHandling:
+    def test_two_points_returns_single_segment(self):
+        """Two data points should produce a simple single segment."""
+        x = np.array([2020, 2022], dtype=float)
+        y = np.array([100, 150], dtype=float)
+        segments = InsightExtractor(x, y).get_structural_segments()
+        assert len(segments) == 1
+        assert segments[0]["start_year"] == 2020
+        assert segments[0]["end_year"] == 2022
+        assert segments[0]["start_value"] == 100
+        assert segments[0]["end_value"] == 150
+        assert segments[0]["slope"] == pytest.approx(25.0)
+        assert segments[0]["p_value"] is None
+
+    def test_three_points_returns_segment(self):
+        """Three data points should produce at least one segment."""
+        x = np.array([2018, 2020, 2022], dtype=float)
+        y = np.array([80, 100, 120], dtype=float)
+        segments = InsightExtractor(x, y).get_structural_segments()
+        assert len(segments) >= 1
+        assert segments[0]["start_year"] == 2018
+
+    def test_one_point_returns_empty(self):
+        """One data point cannot form a segment."""
+        x = np.array([2020], dtype=float)
+        y = np.array([100], dtype=float)
+        segments = InsightExtractor(x, y).get_structural_segments()
+        assert segments == []
+
+    def test_empty_returns_empty(self):
+        """Empty input returns empty segments."""
+        x = np.array([], dtype=float)
+        y = np.array([], dtype=float)
+        segments = InsightExtractor(x, y).get_structural_segments()
+        assert segments == []
+
+    def test_two_points_decreasing(self):
+        """Two decreasing points should have negative slope."""
+        x = np.array([2020, 2022], dtype=float)
+        y = np.array([200, 100], dtype=float)
+        segments = InsightExtractor(x, y).get_structural_segments()
+        assert len(segments) == 1
+        assert segments[0]["slope"] == pytest.approx(-50.0)
+
+    def test_two_points_same_value(self):
+        """Two points with same value should have zero slope."""
+        x = np.array([2020, 2022], dtype=float)
+        y = np.array([100, 100], dtype=float)
+        segments = InsightExtractor(x, y).get_structural_segments()
+        assert len(segments) == 1
+        assert segments[0]["slope"] == pytest.approx(0.0)

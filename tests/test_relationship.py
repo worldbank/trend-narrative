@@ -367,22 +367,6 @@ class TestRelationshipNarrativeInsufficientData:
         assert result["method"] == "insufficient_data"
         assert "limited data" in result["narrative"].lower()
 
-    def test_empty_segments(self):
-        # Constant values produce no segments
-        ref_years = np.array([2012, 2015, 2018, 2020])
-        ref_values = np.array([100, 100, 100, 100])
-        comp_years = np.array([2012, 2015, 2018, 2020])
-        comp_values = np.array([50, 60, 70, 80])
-        result = get_relationship_narrative(
-            reference_years=ref_years,
-            reference_values=ref_values,
-            comparison_years=comp_years,
-            comparison_values=comp_values,
-            reference_name="spending",
-            comparison_name="outcome",
-        )
-        assert result["method"] == "insufficient_data"
-
 
 # ---------------------------------------------------------------------------
 # get_relationship_narrative - comovement path
