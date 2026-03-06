@@ -1,6 +1,6 @@
 # trend-narrative
 
-A standalone Python package that combines **piecewise-linear trend detection** and **plain-English narrative generation** for time-series data.
+A standalone Python package that combines **piecewise-linear trend detection**, **relationship analysis**, and **plain-English narrative generation** for time-series data.
 
 ---
 
@@ -63,8 +63,36 @@ You can also call the extraction step separately if you need the raw numbers:
 
 ```python
 suite = extractor.extract_full_suite()
-# {"cv_value": 14.2, "segments": [...]}
+# {"cv_value": 14.2, "segments": [...], "n_points": 12}
 ```
+
+---
+
+## Relationship narratives
+
+Analyze the relationship between two time series (e.g., spending vs outcomes):
+
+```python
+import numpy as np
+from trend_narrative import get_relationship_narrative
+
+result = get_relationship_narrative(
+    reference_years=np.array([2010, 2012, 2014, 2016, 2018]),
+    reference_values=np.array([100, 120, 140, 160, 180]),
+    comparison_years=np.array([2010, 2012, 2014, 2016, 2018]),
+    comparison_values=np.array([50, 55, 62, 70, 78]),
+    reference_name="spending",
+    comparison_name="outcome",
+)
+print(result["narrative"])
+# → "When spending increases, outcome tends to increase in the same year..."
+print(result["method"])  # "lagged_correlation", "comovement", or "insufficient_data"
+```
+
+The function automatically chooses the analysis method based on data availability:
+- **Lagged correlation**: >= 5 points, tests correlations at various lags
+- **Comovement**: 3-4 points, describes directional movement within segments
+- **Insufficient data**: < 3 points
 
 ---
 
@@ -73,13 +101,43 @@ suite = extractor.extract_full_suite()
 ### `get_segment_narrative(segments, cv_value, metric="expenditure")`
 ### `get_segment_narrative(extractor, metric="expenditure")`
 
-Generates a plain-English narrative. Accepts either precomputed data (Path 1)
-or an `InsightExtractor` instance (Path 2).
+Generates a plain-English narrative for a single time series. Accepts either
+precomputed data (Path 1) or an `InsightExtractor` instance (Path 2).
 
 - No segments + low CV → *"remained highly stable"*
 - No segments + high CV → *"exhibited significant volatility"*
 - Single segment → direction + % change sentence
 - Multi-segment → transition phrases (peak / trough / continuation)
+
+---
+
+### `get_relationship_narrative(...)`
+
+Analyzes the relationship between two time series.
+
+```python
+get_relationship_narrative(
+    reference_years,           # array-like, the "driver" series years
+    reference_values,          # array-like, the "driver" series values
+    comparison_years,          # array-like, the "outcome" series years
+    comparison_values,         # array-like, the "outcome" series values
+    reference_name,            # str, display name for reference
+    comparison_name,           # str, display name for comparison
+    correlation_threshold=5,   # min points for correlation analysis
+    max_lag_cap=5,             # max lag to test in years
+    reference_format=".2f",    # format spec or callable for reference values
+    comparison_format=".2f",   # format spec or callable for comparison values
+    time_unit="year",          # "year", "month", "quarter" for narratives
+    reference_leads=None,      # True/False to override, None to infer
+)
+```
+
+Returns a dict with:
+- `narrative`: str, human-readable description
+- `method`: "lagged_correlation", "comovement", or "insufficient_data"
+- `n_points`: int, number of points in sparser series
+- `best_lag`: dict with lag details (correlation path only)
+- `all_lags`: list of all tested lags (correlation path only)
 
 ---
 
@@ -108,7 +166,7 @@ to control the fitting logic.
 |---|---|---|
 | `get_volatility()` | `float` | Coefficient of Variation (%) |
 | `get_structural_segments()` | `list[dict]` | Delegates to the detector |
-| `extract_full_suite()` | `dict` | `{cv_value, segments}` |
+| `extract_full_suite()` | `dict` | `{cv_value, segments, n_points}` |
 
 ---
 
@@ -143,11 +201,13 @@ trend-narrative/
 │   ├── __init__.py        # Public API
 │   ├── detector.py        # TrendDetector – piecewise-linear fitting
 │   ├── extractor.py       # InsightExtractor – volatility + trend facade
-│   └── narrative.py       # Narrative generation + millify helper
+│   ├── narrative.py       # Narrative generation + millify helper
+│   └── relationship.py    # Relationship analysis between two series
 ├── tests/
 │   ├── test_detector.py
 │   ├── test_extractor.py
-│   └── test_narrative.py
+│   ├── test_narrative.py
+│   └── test_relationship.py
 ├── pyproject.toml
 └── README.md
 ```
