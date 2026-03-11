@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from trend_narrative.relationship import (
+    analyze_relationship,
     get_relationship_narrative,
     get_direction,
     get_correlation_strength,
@@ -1085,3 +1086,245 @@ class TestRelationshipNarrativeNumberFormatting:
             reference_format=currency_fmt,
         )
         assert "(USD 1.0K to USD 1.5K)" in result["narrative"]
+
+
+# ---------------------------------------------------------------------------
+# analyze_relationship
+# ---------------------------------------------------------------------------
+
+class TestAnalyzeRelationship:
+    years_3pt = np.array([2010, 2015, 2020])
+    ref_increasing = np.array([100, 125, 150], dtype=float)
+    comp_increasing = np.array([50, 65, 80], dtype=float)
+    periods_10 = np.arange(1, 11)
+    ref_lag0_pos = np.array([100, 108, 112, 125, 128, 140, 145, 155, 162, 175], dtype=float)
+    comp_lag0_pos = np.array([50, 55, 58, 65, 68, 75, 78, 85, 90, 98], dtype=float)
+
+    def test_returns_comovement_insights(self):
+        """analyze_relationship returns structured insights for comovement case."""
+        result = analyze_relationship(
+            reference_years=self.years_3pt,
+            reference_values=self.ref_increasing,
+            comparison_years=self.years_3pt,
+            comparison_values=self.comp_increasing,
+        )
+        assert result["method"] == "comovement"
+        assert result["n_points"] == 3
+        assert result["segment_details"] is not None
+        assert result["best_lag"] is None
+        assert result["all_lags"] is None
+        assert "reference_leads" in result
+
+    def test_returns_lagged_correlation_insights(self):
+        """analyze_relationship returns structured insights for correlation case."""
+        result = analyze_relationship(
+            reference_years=self.periods_10,
+            reference_values=self.ref_lag0_pos,
+            comparison_years=self.periods_10,
+            comparison_values=self.comp_lag0_pos,
+            correlation_threshold=8,
+        )
+        assert result["method"] == "lagged_correlation"
+        assert result["n_points"] == 10
+        assert result["segment_details"] is None
+        assert result["best_lag"] is not None
+        assert result["all_lags"] is not None
+        assert "reference_leads" in result
+
+    def test_returns_insufficient_data_insights(self):
+        """analyze_relationship returns structured insights for insufficient data."""
+        result = analyze_relationship(
+            reference_years=np.array([2010, 2020]),
+            reference_values=np.array([100, 150]),
+            comparison_years=np.array([2010, 2020]),
+            comparison_values=np.array([50, 75]),
+        )
+        assert result["method"] == "insufficient_data"
+        assert result["n_points"] == 2
+        assert result["segment_details"] is None
+        assert result["best_lag"] is None
+        assert "reference_leads" in result
+
+    def test_no_narrative_key(self):
+        """analyze_relationship should not include narrative in result."""
+        result = analyze_relationship(
+            reference_years=self.years_3pt,
+            reference_values=self.ref_increasing,
+            comparison_years=self.years_3pt,
+            comparison_values=self.comp_increasing,
+        )
+        assert "narrative" not in result
+
+
+# ---------------------------------------------------------------------------
+# get_relationship_narrative - precomputed insights path
+# ---------------------------------------------------------------------------
+
+class TestRelationshipNarrativePrecomputedPath:
+    def test_comovement_from_insights(self):
+        """Path 1: generate narrative from precomputed comovement insights."""
+        insights = {
+            "method": "comovement",
+            "n_points": 3,
+            "segment_details": [
+                {
+                    "start_year": 2010,
+                    "end_year": 2020,
+                    "reference_direction": "increased",
+                    "reference_start": 100.0,
+                    "reference_end": 150.0,
+                    "comparison_n_points": 3,
+                    "comparison_direction": "increased",
+                    "comparison_start": 50.0,
+                    "comparison_end": 80.0,
+                    "interpolated": False,
+                }
+            ],
+            "best_lag": None,
+            "all_lags": None,
+            "max_lag_tested": None,
+            "reference_leads": True,
+        }
+        result = get_relationship_narrative(
+            insights=insights,
+            reference_name="spending",
+            comparison_name="outcome",
+        )
+        assert result["method"] == "comovement"
+        assert "spending" in result["narrative"]
+        assert "outcome" in result["narrative"]
+        assert "both moving in the same direction" in result["narrative"]
+
+    def test_lagged_correlation_from_insights(self):
+        """Path 1: generate narrative from precomputed correlation insights."""
+        insights = {
+            "method": "lagged_correlation",
+            "n_points": 10,
+            "segment_details": None,
+            "best_lag": {
+                "lag": 0,
+                "correlation": 0.98,
+                "p_value": 0.001,
+                "n_pairs": 9,
+            },
+            "all_lags": [
+                {"lag": 0, "correlation": 0.98, "p_value": 0.001, "n_pairs": 9},
+            ],
+            "max_lag_tested": 0,
+            "reference_leads": True,
+        }
+        result = get_relationship_narrative(
+            insights=insights,
+            reference_name="spending",
+            comparison_name="outcome",
+        )
+        assert result["method"] == "lagged_correlation"
+        assert "spending" in result["narrative"]
+        assert "outcome" in result["narrative"]
+        assert "very strong" in result["narrative"]
+
+    def test_insufficient_data_from_insights(self):
+        """Path 1: generate narrative from precomputed insufficient data insights."""
+        insights = {
+            "method": "insufficient_data",
+            "n_points": 2,
+            "segment_details": None,
+            "best_lag": None,
+            "all_lags": None,
+            "max_lag_tested": None,
+            "reference_leads": True,
+        }
+        result = get_relationship_narrative(
+            insights=insights,
+            reference_name="spending",
+            comparison_name="outcome",
+        )
+        assert result["method"] == "insufficient_data"
+        assert "cannot be determined" in result["narrative"]
+
+    def test_reference_leads_override_with_insights(self):
+        """User can override reference_leads even when using precomputed insights."""
+        insights = {
+            "method": "lagged_correlation",
+            "n_points": 10,
+            "segment_details": None,
+            "best_lag": {
+                "lag": 0,
+                "correlation": 0.98,
+                "p_value": 0.001,
+                "n_pairs": 9,
+            },
+            "all_lags": [
+                {"lag": 0, "correlation": 0.98, "p_value": 0.001, "n_pairs": 9},
+            ],
+            "max_lag_tested": 0,
+            "reference_leads": True,
+        }
+        result = get_relationship_narrative(
+            insights=insights,
+            reference_name="spending",
+            comparison_name="outcome",
+            reference_leads=False,
+        )
+        assert "When outcome increases" in result["narrative"]
+        assert "spending tends to" in result["narrative"]
+
+    def test_raises_without_insights_or_data(self):
+        """Should raise ValueError if neither insights nor data provided."""
+        with pytest.raises(ValueError, match="Provide either insights="):
+            get_relationship_narrative(
+                reference_name="spending",
+                comparison_name="outcome",
+            )
+
+    def test_insights_ignores_data_arrays(self):
+        """When insights provided, data arrays are ignored."""
+        insights = {
+            "method": "insufficient_data",
+            "n_points": 2,
+            "segment_details": None,
+            "best_lag": None,
+            "all_lags": None,
+            "max_lag_tested": None,
+            "reference_leads": True,
+        }
+        result = get_relationship_narrative(
+            reference_years=np.arange(2010, 2025),
+            reference_values=np.arange(15, dtype=float) * 10,
+            comparison_years=np.arange(2010, 2025),
+            comparison_values=np.arange(15, dtype=float) * 5,
+            insights=insights,
+            reference_name="spending",
+            comparison_name="outcome",
+        )
+        assert result["method"] == "insufficient_data"
+
+    def test_roundtrip_analyze_then_narrative(self):
+        """analyze_relationship output can be passed directly to get_relationship_narrative."""
+        years = np.array([2010, 2015, 2020])
+        ref_values = np.array([100, 125, 150], dtype=float)
+        comp_values = np.array([50, 65, 80], dtype=float)
+
+        insights = analyze_relationship(
+            reference_years=years,
+            reference_values=ref_values,
+            comparison_years=years,
+            comparison_values=comp_values,
+        )
+        result = get_relationship_narrative(
+            insights=insights,
+            reference_name="spending",
+            comparison_name="outcome",
+        )
+
+        direct_result = get_relationship_narrative(
+            reference_years=years,
+            reference_values=ref_values,
+            comparison_years=years,
+            comparison_values=comp_values,
+            reference_name="spending",
+            comparison_name="outcome",
+        )
+
+        assert result["narrative"] == direct_result["narrative"]
+        assert result["method"] == direct_result["method"]

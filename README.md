@@ -23,23 +23,7 @@ Dependencies: `numpy`, `scipy`, `pwlf`
 
 ## Two calling paths
 
-### Path 1 — from precomputed data
-
-If you already have segments and a CV value stored (e.g. from a database or
-a previous extraction run), pass them directly — no re-fitting required:
-
-```python
-from trend_narrative import get_segment_narrative
-
-narrative = get_segment_narrative(
-    segments=row["segments"],
-    cv_value=row["cv_value"],
-    metric="health spending",
-)
-print(narrative)
-```
-
-### Path 2 — from raw data
+### Path 1 — from raw data
 
 Create an `InsightExtractor` with your chosen detector, then pass it to the
 narrative function. Keeping the two steps separate means you can swap in any
@@ -66,11 +50,31 @@ suite = extractor.extract_full_suite()
 # {"cv_value": 14.2, "segments": [...], "n_points": 12}
 ```
 
+### Path 2 — from precomputed data
+
+If you already have segments and a CV value stored (e.g. from a database or
+a previous extraction run), pass them directly — no re-fitting required:
+
+```python
+from trend_narrative import get_segment_narrative
+
+narrative = get_segment_narrative(
+    segments=row["segments"],
+    cv_value=row["cv_value"],
+    metric="health spending",
+)
+print(narrative)
+```
+
 ---
 
 ## Relationship narratives
 
-Analyze the relationship between two time series (e.g., spending vs outcomes):
+Analyze the relationship between two time series (e.g., spending vs outcomes).
+
+### Path 1 — from raw data
+
+Compute the analysis on the fly from raw time series data:
 
 ```python
 import numpy as np
@@ -87,6 +91,48 @@ result = get_relationship_narrative(
 print(result["narrative"])
 # → "When spending increases, outcome tends to increase in the same year..."
 print(result["method"])  # "lagged_correlation", "comovement", or "insufficient_data"
+```
+
+### Path 2 — from precomputed insights
+
+If you already have relationship insights stored (e.g. from a database or
+a previous analysis run), pass them directly — no re-analysis required:
+
+```python
+from trend_narrative import get_relationship_narrative
+
+narrative = get_relationship_narrative(
+    insights=row["relationship_insights"],
+    reference_name="spending",
+    comparison_name="outcome",
+)
+print(narrative["narrative"])
+```
+
+### Separate analysis and narrative generation
+
+Use `analyze_relationship()` when you want to inspect or store the analysis
+results separately from narrative generation:
+
+```python
+from trend_narrative import analyze_relationship, get_relationship_narrative
+
+insights = analyze_relationship(
+    reference_years=years1,
+    reference_values=values1,
+    comparison_years=years2,
+    comparison_values=values2,
+)
+# Store insights in database, inspect programmatically, etc.
+print(insights["method"])  # "lagged_correlation", "comovement", or "insufficient_data"
+print(insights["best_lag"])  # lag details for correlation path
+
+# Generate narrative later from stored insights
+result = get_relationship_narrative(
+    insights=insights,
+    reference_name="spending",
+    comparison_name="outcome",
+)
 ```
 
 The function automatically chooses the analysis method based on data availability:
@@ -111,24 +157,59 @@ precomputed data (Path 1) or an `InsightExtractor` instance (Path 2).
 
 ---
 
-### `get_relationship_narrative(...)`
+### `analyze_relationship(...)`
 
-Analyzes the relationship between two time series.
+Analyzes the relationship between two time series and returns structured
+insights without generating narrative text.
 
 ```python
-get_relationship_narrative(
+analyze_relationship(
     reference_years,           # array-like, the "driver" series years
     reference_values,          # array-like, the "driver" series values
     comparison_years,          # array-like, the "outcome" series years
     comparison_values,         # array-like, the "outcome" series values
-    reference_name,            # str, display name for reference
-    comparison_name,           # str, display name for comparison
+    reference_segments=None,   # optional pre-computed segments
+    correlation_threshold=5,   # min points for correlation analysis
+    max_lag_cap=5,             # max lag to test in years
+)
+```
+
+Returns a dict with:
+- `method`: "lagged_correlation", "comovement", or "insufficient_data"
+- `n_points`: int, number of points in sparser series
+- `segment_details`: list[dict], per-segment analysis (comovement only)
+- `best_lag`: dict with lag, correlation, p_value, n_pairs (correlation only)
+- `all_lags`: list of all tested lags (correlation only)
+- `max_lag_tested`: int, maximum lag tested (correlation only)
+- `reference_leads`: bool, whether reference series leads comparison
+
+---
+
+### `get_relationship_narrative(...)`
+
+Generates a narrative from relationship analysis. Accepts either precomputed
+insights (Path 1) or raw data arrays (Path 2).
+
+```python
+get_relationship_narrative(
+    # Path 2: raw data (optional if insights provided)
+    reference_years=None,      # array-like, the "driver" series years
+    reference_values=None,     # array-like, the "driver" series values
+    comparison_years=None,     # array-like, the "outcome" series years
+    comparison_values=None,    # array-like, the "outcome" series values
+    # Required for narrative
+    reference_name="",         # str, display name for reference
+    comparison_name="",        # str, display name for comparison
+    # Optional parameters
+    reference_segments=None,   # optional pre-computed segments
     correlation_threshold=5,   # min points for correlation analysis
     max_lag_cap=5,             # max lag to test in years
     reference_format=".2f",    # format spec or callable for reference values
     comparison_format=".2f",   # format spec or callable for comparison values
     time_unit="year",          # "year", "month", "quarter" for narratives
     reference_leads=None,      # True/False to override, None to infer
+    # Path 1: precomputed insights
+    insights=None,             # dict from analyze_relationship()
 )
 ```
 
@@ -136,8 +217,10 @@ Returns a dict with:
 - `narrative`: str, human-readable description
 - `method`: "lagged_correlation", "comovement", or "insufficient_data"
 - `n_points`: int, number of points in sparser series
+- `segment_details`: list[dict], per-segment analysis (comovement only)
 - `best_lag`: dict with lag details (correlation path only)
 - `all_lags`: list of all tested lags (correlation path only)
+- `max_lag_tested`: int, maximum lag tested (correlation only)
 
 ---
 

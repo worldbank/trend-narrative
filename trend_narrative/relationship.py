@@ -495,25 +495,22 @@ def _build_lagged_correlation_narrative(
     return narrative
 
 
-def get_relationship_narrative(
+def analyze_relationship(
     reference_years: "array-like",
     reference_values: "array-like",
     comparison_years: "array-like",
     comparison_values: "array-like",
-    reference_name: str,
-    comparison_name: str,
     reference_segments: Optional[list[dict]] = None,
     correlation_threshold: int = DEFAULT_CORRELATION_THRESHOLD,
     max_lag_cap: int = DEFAULT_MAX_LAG_CAP,
-    reference_format: Formatter = ".2f",
-    comparison_format: Formatter = ".2f",
-    time_unit: str = "year",
-    reference_leads: Optional[bool] = None,
 ) -> dict:
     """
     Analyze relationship between two time series.
 
-    Segments can be provided directly or computed from reference data.
+    Returns structured insights without generating narrative text. Use this
+    function when you want to inspect or store the analysis results separately
+    from narrative generation.
+
     Chooses analysis method based on data availability:
     - Insufficient data: < 3 points
     - Comovement: >= 3 but < correlation_threshold points
@@ -529,10 +526,6 @@ def get_relationship_narrative(
         Year values for the comparison series (the outcome series).
     comparison_values : array-like
         Data values for the comparison series.
-    reference_name : str
-        Display name for the reference series.
-    comparison_name : str
-        Display name for the comparison series.
     reference_segments : list[dict], optional
         Pre-computed segments from InsightExtractor for the reference series.
         Each dict should contain: start_year, end_year, start_value, end_value.
@@ -543,30 +536,18 @@ def get_relationship_narrative(
     max_lag_cap : int
         Maximum lag to test in years (default 5). Actual max lag may be
         lower if data is insufficient.
-    reference_format : str or callable
-        Format spec (e.g., ".2f") or callable (e.g., lambda x: f"${x:,.0f}")
-        for reference series values in narratives. Default ".2f".
-    comparison_format : str or callable
-        Format spec or callable for comparison series values. Default ".2f".
-    time_unit : str
-        Time unit label for narratives (default "year"). Use "month", "quarter", etc.
-    reference_leads : bool, optional
-        Controls narrative direction for lagged correlation:
-        - True: "When reference increases, comparison follows"
-        - False: "When comparison increases, reference follows"
-        - None (default): inferred from sparsity (sparser series is the follower)
 
     Returns
     -------
     dict
         Keys:
-        - narrative: str, human-readable description
         - method: str, one of "insufficient_data", "comovement", "lagged_correlation"
         - n_points: int, number of data points in sparser series
         - segment_details: list[dict], per-segment analysis (comovement only)
         - best_lag: dict with lag, correlation, p_value, n_pairs (correlation only)
         - all_lags: list[dict], results for all tested lags (correlation only)
         - max_lag_tested: int, maximum lag that was tested (correlation only)
+        - reference_leads: bool, whether reference series leads comparison
     """
     reference_years = np.asarray(reference_years, dtype=float)
     reference_values = np.asarray(reference_values, dtype=float)
@@ -599,21 +580,25 @@ def get_relationship_narrative(
     if n_comparison <= n_reference:
         sparse_years, sparse_values = comparison_years, comparison_values
         dense_years, dense_values = reference_years, reference_values
-        inferred_reference_leads = True  # reference is dense, so "reference leads comparison"
+        reference_leads = True  # reference is dense, so "reference leads comparison"
     else:
         sparse_years, sparse_values = reference_years, reference_values
         dense_years, dense_values = comparison_years, comparison_values
-        inferred_reference_leads = False  # comparison is dense, so "comparison leads reference"
-
-    # Use user-specified direction if provided, otherwise infer from sparsity
-    if reference_leads is None:
-        reference_leads = inferred_reference_leads
+        reference_leads = False  # comparison is dense, so "comparison leads reference"
 
     n_sparse = len(sparse_years)
 
     # Insufficient data: too few points
     if n_sparse < THRESHOLD_LOW:
-        return _insufficient_data_result(reference_name, comparison_name, n_sparse)
+        return {
+            "method": "insufficient_data",
+            "n_points": n_sparse,
+            "segment_details": None,
+            "best_lag": None,
+            "all_lags": None,
+            "max_lag_tested": None,
+            "reference_leads": reference_leads,
+        }
 
     # Try correlation analysis first if we have enough points
     if n_sparse >= correlation_threshold:
@@ -632,22 +617,14 @@ def get_relationship_narrative(
         )
 
         if lag_results:
-            best_lag = find_best_lag(lag_results)
-
-            narrative = _build_lagged_correlation_narrative(
-                best_lag, lag_results, n_sparse, max_lag,
-                reference_name, comparison_name, time_unit,
-                reference_leads=reference_leads
-            )
-
             return {
-                "narrative": narrative,
                 "method": "lagged_correlation",
                 "n_points": n_sparse,
                 "segment_details": None,
-                "best_lag": best_lag,
+                "best_lag": find_best_lag(lag_results),
                 "all_lags": lag_results,
                 "max_lag_tested": max_lag,
+                "reference_leads": reference_leads,
             }
 
     # Fall back to comovement analysis - compute segments if not provided
@@ -657,24 +634,193 @@ def get_relationship_narrative(
         reference_segments = extractor.get_structural_segments()
 
     if not reference_segments:
-        return _insufficient_data_result(reference_name, comparison_name, n_sparse)
+        return {
+            "method": "insufficient_data",
+            "n_points": n_sparse,
+            "segment_details": None,
+            "best_lag": None,
+            "all_lags": None,
+            "max_lag_tested": None,
+            "reference_leads": reference_leads,
+        }
 
     segment_details = [
         analyze_segment_comovement(seg, comparison_years, comparison_values)
         for seg in reference_segments
     ]
 
-    narrative = _build_comovement_narrative(
-        segment_details, reference_name, comparison_name,
-        reference_format=reference_format, comparison_format=comparison_format
-    )
-
     return {
-        "narrative": narrative,
         "method": "comovement",
         "n_points": n_sparse,
         "segment_details": segment_details,
         "best_lag": None,
         "all_lags": None,
         "max_lag_tested": None,
+        "reference_leads": reference_leads,
+    }
+
+
+def get_relationship_narrative(
+    reference_years: "array-like" = None,
+    reference_values: "array-like" = None,
+    comparison_years: "array-like" = None,
+    comparison_values: "array-like" = None,
+    reference_name: str = "",
+    comparison_name: str = "",
+    reference_segments: Optional[list[dict]] = None,
+    correlation_threshold: int = DEFAULT_CORRELATION_THRESHOLD,
+    max_lag_cap: int = DEFAULT_MAX_LAG_CAP,
+    reference_format: Formatter = ".2f",
+    comparison_format: Formatter = ".2f",
+    time_unit: str = "year",
+    reference_leads: Optional[bool] = None,
+    insights: Optional[dict] = None,
+) -> dict:
+    """
+    Analyze relationship between two time series and generate narrative.
+
+    Supports two calling paths:
+
+    **Path 1 – precomputed insights** (e.g. insights already stored in a
+    Delta table — no re-analysis required):
+
+    .. code-block:: python
+
+        get_relationship_narrative(
+            insights=row["relationship_insights"],
+            reference_name="spending",
+            comparison_name="outcome",
+        )
+
+    **Path 2 – from raw data** (analysis computed on the fly):
+
+    .. code-block:: python
+
+        get_relationship_narrative(
+            reference_years=years1,
+            reference_values=values1,
+            comparison_years=years2,
+            comparison_values=values2,
+            reference_name="spending",
+            comparison_name="outcome",
+        )
+
+    Parameters
+    ----------
+    reference_years : array-like, optional
+        Year values for reference series (Path 2).
+    reference_values : array-like, optional
+        Data values for reference series (Path 2).
+    comparison_years : array-like, optional
+        Year values for the comparison series (Path 2).
+    comparison_values : array-like, optional
+        Data values for the comparison series (Path 2).
+    reference_name : str
+        Display name for the reference series.
+    comparison_name : str
+        Display name for the comparison series.
+    reference_segments : list[dict], optional
+        Pre-computed segments from InsightExtractor for the reference series.
+        Each dict should contain: start_year, end_year, start_value, end_value.
+        If not provided, computed from reference_years/reference_values.
+    correlation_threshold : int
+        Minimum points to use correlation analysis (default 5).
+        Below this, comovement analysis is used.
+    max_lag_cap : int
+        Maximum lag to test in years (default 5). Actual max lag may be
+        lower if data is insufficient.
+    reference_format : str or callable
+        Format spec (e.g., ".2f") or callable (e.g., lambda x: f"${x:,.0f}")
+        for reference series values in narratives. Default ".2f".
+    comparison_format : str or callable
+        Format spec or callable for comparison series values. Default ".2f".
+    time_unit : str
+        Time unit label for narratives (default "year"). Use "month", "quarter", etc.
+    reference_leads : bool, optional
+        Controls narrative direction for lagged correlation:
+        - True: "When reference increases, comparison follows"
+        - False: "When comparison increases, reference follows"
+        - None (default): inferred from sparsity (sparser series is the follower)
+    insights : dict, optional
+        Pre-computed insights from analyze_relationship() (Path 1).
+        If provided, raw data arrays are ignored.
+
+    Returns
+    -------
+    dict
+        Keys:
+        - narrative: str, human-readable description
+        - method: str, one of "insufficient_data", "comovement", "lagged_correlation"
+        - n_points: int, number of data points in sparser series
+        - segment_details: list[dict], per-segment analysis (comovement only)
+        - best_lag: dict with lag, correlation, p_value, n_pairs (correlation only)
+        - all_lags: list[dict], results for all tested lags (correlation only)
+        - max_lag_tested: int, maximum lag that was tested (correlation only)
+
+    Raises
+    ------
+    ValueError
+        If neither insights nor data arrays are provided.
+    """
+    # Path 1: use precomputed insights
+    if insights is not None:
+        analysis = insights
+    # Path 2: compute insights from data
+    elif reference_years is not None and comparison_years is not None:
+        analysis = analyze_relationship(
+            reference_years=reference_years,
+            reference_values=reference_values,
+            comparison_years=comparison_years,
+            comparison_values=comparison_values,
+            reference_segments=reference_segments,
+            correlation_threshold=correlation_threshold,
+            max_lag_cap=max_lag_cap,
+        )
+    else:
+        raise ValueError(
+            "Provide either insights= or data arrays "
+            "(reference_years, reference_values, comparison_years, comparison_values)"
+        )
+
+    # Use user-specified direction if provided, otherwise use analyzed
+    if reference_leads is None:
+        reference_leads = analysis.get("reference_leads", True)
+
+    method = analysis["method"]
+    n_points = analysis["n_points"]
+
+    # Build narrative based on method
+    if method == "insufficient_data":
+        narrative = (
+            f"The relationship between {reference_name} and {comparison_name} "
+            "cannot be determined due to limited data availability."
+        )
+    elif method == "lagged_correlation":
+        narrative = _build_lagged_correlation_narrative(
+            analysis["best_lag"],
+            analysis["all_lags"],
+            n_points,
+            analysis["max_lag_tested"],
+            reference_name,
+            comparison_name,
+            time_unit,
+            reference_leads=reference_leads,
+        )
+    else:  # comovement
+        narrative = _build_comovement_narrative(
+            analysis["segment_details"],
+            reference_name,
+            comparison_name,
+            reference_format=reference_format,
+            comparison_format=comparison_format,
+        )
+
+    return {
+        "narrative": narrative,
+        "method": method,
+        "n_points": n_points,
+        "segment_details": analysis["segment_details"],
+        "best_lag": analysis["best_lag"],
+        "all_lags": analysis["all_lags"],
+        "max_lag_tested": analysis["max_lag_tested"],
     }
