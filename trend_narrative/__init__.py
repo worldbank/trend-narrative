@@ -35,7 +35,8 @@ from .narrative import (
     get_segment_narrative,
     millify,
 )
-from .relationship import analyze_relationship, get_relationship_narrative
+from .relationship_analysis import analyze_relationship
+from .relationship_narrative import get_relationship_narrative
 
 __all__ = [
     "TrendDetector",

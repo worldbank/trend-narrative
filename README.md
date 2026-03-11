@@ -281,16 +281,18 @@ uv run pytest --cov=trend_narrative --cov-report=term-missing
 ```
 trend-narrative/
 ├── trend_narrative/
-│   ├── __init__.py        # Public API
-│   ├── detector.py        # TrendDetector – piecewise-linear fitting
-│   ├── extractor.py       # InsightExtractor – volatility + trend facade
-│   ├── narrative.py       # Narrative generation + millify helper
-│   └── relationship.py    # Relationship analysis between two series
+│   ├── __init__.py              # Public API
+│   ├── detector.py              # TrendDetector – piecewise-linear fitting
+│   ├── extractor.py             # InsightExtractor – volatility + trend facade
+│   ├── narrative.py             # Narrative generation + millify helper
+│   ├── relationship_analysis.py # Relationship analysis between two series
+│   └── relationship_narrative.py # Relationship narrative generation
 ├── tests/
 │   ├── test_detector.py
 │   ├── test_extractor.py
 │   ├── test_narrative.py
-│   └── test_relationship.py
+│   ├── test_relationship_analysis.py
+│   └── test_relationship_narrative.py
 ├── pyproject.toml
 └── README.md
 ```
