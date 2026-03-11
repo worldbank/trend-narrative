@@ -35,13 +35,17 @@ from .narrative import (
     get_segment_narrative,
     millify,
 )
+from .relationship_analysis import analyze_relationship
+from .relationship_narrative import get_relationship_narrative
 
 __all__ = [
     "TrendDetector",
     "InsightExtractor",
     "consolidate_segments",
     "get_segment_narrative",
+    "analyze_relationship",
+    "get_relationship_narrative",
     "millify",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

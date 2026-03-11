@@ -45,8 +45,12 @@ class InsightExtractor:
         y: "array-like",
         detector: TrendDetector | None = None,
     ) -> None:
-        self.x = np.asarray(x, dtype=float)
-        self.y = np.asarray(y, dtype=float)
+        x = np.asarray(x, dtype=float)
+        y = np.asarray(y, dtype=float)
+        # Sort by x to ensure correct segment computation
+        sort_idx = np.argsort(x)
+        self.x = x[sort_idx]
+        self.y = y[sort_idx]
         self.trend_detector = detector if detector is not None else TrendDetector()
 
     # ------------------------------------------------------------------
@@ -69,12 +73,35 @@ class InsightExtractor:
     def get_structural_segments(self) -> list[dict]:
         """Run the trend detector and return per-segment statistics.
 
+        For 2-3 data points where piecewise fitting isn't possible,
+        returns a simple single segment from first to last point.
+
         Returns
         -------
         list[dict]
             See :meth:`TrendDetector.extract_trend` for the dict schema.
         """
-        return self.trend_detector.extract_trend(self.x, self.y)
+        if len(self.x) < 2:
+            return []
+
+        segments = self.trend_detector.extract_trend(self.x, self.y)
+
+        # Fallback for small datasets: create simple start-to-end segment
+        if not segments and len(self.x) >= 2:
+            start_year, end_year = self.x[0], self.x[-1]
+            start_value, end_value = self.y[0], self.y[-1]
+            duration = end_year - start_year
+            slope = (end_value - start_value) / duration if duration > 0 else 0.0
+            segments = [{
+                "start_year": float(start_year),
+                "end_year": float(end_year),
+                "start_value": float(start_value),
+                "end_value": float(end_value),
+                "slope": float(slope),
+                "p_value": None,  # No statistical test for simple segment
+            }]
+
+        return segments
 
     # ------------------------------------------------------------------
     # Convenience bundle
@@ -89,8 +116,11 @@ class InsightExtractor:
             Coefficient of Variation (%).
         segments : list[dict]
             Piecewise-linear segment statistics.
+        n_points : int
+            Number of data points in the series.
         """
         return {
             "cv_value": self.get_volatility(),
             "segments": self.get_structural_segments(),
+            "n_points": len(self.x),
         }

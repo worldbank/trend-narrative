@@ -1,6 +1,6 @@
 # trend-narrative
 
-A standalone Python package that combines **piecewise-linear trend detection** and **plain-English narrative generation** for time-series data.
+A standalone Python package that combines **piecewise-linear trend detection**, **relationship analysis**, and **plain-English narrative generation** for time-series data.
 
 ---
 
@@ -23,23 +23,7 @@ Dependencies: `numpy`, `scipy`, `pwlf`
 
 ## Two calling paths
 
-### Path 1 — from precomputed data
-
-If you already have segments and a CV value stored (e.g. from a database or
-a previous extraction run), pass them directly — no re-fitting required:
-
-```python
-from trend_narrative import get_segment_narrative
-
-narrative = get_segment_narrative(
-    segments=row["segments"],
-    cv_value=row["cv_value"],
-    metric="health spending",
-)
-print(narrative)
-```
-
-### Path 2 — from raw data
+### Path 1 — from raw data
 
 Create an `InsightExtractor` with your chosen detector, then pass it to the
 narrative function. Keeping the two steps separate means you can swap in any
@@ -63,8 +47,98 @@ You can also call the extraction step separately if you need the raw numbers:
 
 ```python
 suite = extractor.extract_full_suite()
-# {"cv_value": 14.2, "segments": [...]}
+# {"cv_value": 14.2, "segments": [...], "n_points": 12}
 ```
+
+### Path 2 — from precomputed data
+
+If you already have segments and a CV value stored (e.g. from a database or
+a previous extraction run), pass them directly — no re-fitting required:
+
+```python
+from trend_narrative import get_segment_narrative
+
+narrative = get_segment_narrative(
+    segments=row["segments"],
+    cv_value=row["cv_value"],
+    metric="health spending",
+)
+print(narrative)
+```
+
+---
+
+## Relationship narratives
+
+Analyze the relationship between two time series (e.g., spending vs outcomes).
+
+### Path 1 — from raw data
+
+Compute the analysis on the fly from raw time series data:
+
+```python
+import numpy as np
+from trend_narrative import get_relationship_narrative
+
+result = get_relationship_narrative(
+    reference_years=np.array([2010, 2012, 2014, 2016, 2018]),
+    reference_values=np.array([100, 120, 140, 160, 180]),
+    comparison_years=np.array([2010, 2012, 2014, 2016, 2018]),
+    comparison_values=np.array([50, 55, 62, 70, 78]),
+    reference_name="spending",
+    comparison_name="outcome",
+)
+print(result["narrative"])
+# → "When spending increases, outcome tends to increase in the same year..."
+print(result["method"])  # "lagged_correlation", "comovement", or "insufficient_data"
+```
+
+### Path 2 — from precomputed insights
+
+If you already have relationship insights stored (e.g. from a database or
+a previous analysis run), pass them directly — no re-analysis required:
+
+```python
+from trend_narrative import get_relationship_narrative
+
+narrative = get_relationship_narrative(
+    insights=row["relationship_insights"],
+    reference_name="spending",
+    comparison_name="outcome",
+)
+print(narrative["narrative"])
+```
+
+### Separate analysis and narrative generation
+
+Use `analyze_relationship()` when you want to inspect or store the analysis
+results separately from narrative generation:
+
+```python
+from trend_narrative import analyze_relationship, get_relationship_narrative
+
+insights = analyze_relationship(
+    reference_years=years1,
+    reference_values=values1,
+    comparison_years=years2,
+    comparison_values=values2,
+)
+# Store insights in database, inspect programmatically, etc.
+print(insights["method"])  # "lagged_correlation", "comovement", or "insufficient_data"
+print(insights["best_lag"])  # lag details for correlation path
+
+# Generate narrative later from stored insights
+result = get_relationship_narrative(
+    insights=insights,
+    reference_name="spending",
+    comparison_name="outcome",
+)
+```
+
+The function automatically chooses the analysis method based on data availability:
+- **Lagged correlation**: >= 5 points, tests correlations at various lags
+- **Comovement**: 3-4 points, describes directional movement within segments
+- **Insufficient data**: < 3 points
 
 ---
 
@@ -73,13 +147,80 @@ suite = extractor.extract_full_suite()
 ### `get_segment_narrative(segments, cv_value, metric="expenditure")`
 ### `get_segment_narrative(extractor, metric="expenditure")`
 
-Generates a plain-English narrative. Accepts either precomputed data (Path 1)
-or an `InsightExtractor` instance (Path 2).
+Generates a plain-English narrative for a single time series. Accepts either
+precomputed data (Path 1) or an `InsightExtractor` instance (Path 2).
 
 - No segments + low CV → *"remained highly stable"*
 - No segments + high CV → *"exhibited significant volatility"*
 - Single segment → direction + % change sentence
 - Multi-segment → transition phrases (peak / trough / continuation)
+
+---
+
+### `analyze_relationship(...)`
+
+Analyzes the relationship between two time series and returns structured
+insights without generating narrative text.
+
+```python
+analyze_relationship(
+    reference_years,           # array-like, the "driver" series years
+    reference_values,          # array-like, the "driver" series values
+    comparison_years,          # array-like, the "outcome" series years
+    comparison_values,         # array-like, the "outcome" series values
+    reference_segments=None,   # optional pre-computed segments
+    correlation_threshold=5,   # min points for correlation analysis
+    max_lag_cap=5,             # max lag to test in years
+)
+```
+
+Returns a dict with:
+- `method`: "lagged_correlation", "comovement", or "insufficient_data"
+- `n_points`: int, number of points in sparser series
+- `segment_details`: list[dict], per-segment analysis (comovement only)
+- `best_lag`: dict with lag, correlation, p_value, n_pairs (correlation only)
+- `all_lags`: list of all tested lags (correlation only)
+- `max_lag_tested`: int, maximum lag tested (correlation only)
+- `reference_leads`: bool, whether reference series leads comparison
+
+---
+
+### `get_relationship_narrative(...)`
+
+Generates a narrative from relationship analysis. Accepts either precomputed
+insights (Path 1) or raw data arrays (Path 2).
+
+```python
+get_relationship_narrative(
+    # Path 2: raw data (optional if insights provided)
+    reference_years=None,      # array-like, the "driver" series years
+    reference_values=None,     # array-like, the "driver" series values
+    comparison_years=None,     # array-like, the "outcome" series years
+    comparison_values=None,    # array-like, the "outcome" series values
+    # Required for narrative
+    reference_name="",         # str, display name for reference
+    comparison_name="",        # str, display name for comparison
+    # Optional parameters
+    reference_segments=None,   # optional pre-computed segments
+    correlation_threshold=5,   # min points for correlation analysis
+    max_lag_cap=5,             # max lag to test in years
+    reference_format=".2f",    # format spec or callable for reference values
+    comparison_format=".2f",   # format spec or callable for comparison values
+    time_unit="year",          # "year", "month", "quarter" for narratives
+    reference_leads=None,      # True/False to override, None to infer
+    # Path 1: precomputed insights
+    insights=None,             # dict from analyze_relationship()
+)
+```
+
+Returns a dict with:
+- `narrative`: str, human-readable description
+- `method`: "lagged_correlation", "comovement", or "insufficient_data"
+- `n_points`: int, number of points in sparser series
+- `segment_details`: list[dict], per-segment analysis (comovement only)
+- `best_lag`: dict with lag details (correlation path only)
+- `all_lags`: list of all tested lags (correlation path only)
+- `max_lag_tested`: int, maximum lag tested (correlation only)
 
 ---
 
@@ -108,7 +249,7 @@ to control the fitting logic.
 |---|---|---|
 | `get_volatility()` | `float` | Coefficient of Variation (%) |
 | `get_structural_segments()` | `list[dict]` | Delegates to the detector |
-| `extract_full_suite()` | `dict` | `{cv_value, segments}` |
+| `extract_full_suite()` | `dict` | `{cv_value, segments, n_points}` |
 
 ---
 
@@ -140,14 +281,18 @@ uv run pytest --cov=trend_narrative --cov-report=term-missing
 ```
 trend-narrative/
 ├── trend_narrative/
-│   ├── __init__.py        # Public API
-│   ├── detector.py        # TrendDetector – piecewise-linear fitting
-│   ├── extractor.py       # InsightExtractor – volatility + trend facade
-│   └── narrative.py       # Narrative generation + millify helper
+│   ├── __init__.py              # Public API
+│   ├── detector.py              # TrendDetector – piecewise-linear fitting
+│   ├── extractor.py             # InsightExtractor – volatility + trend facade
+│   ├── narrative.py             # Narrative generation + millify helper
+│   ├── relationship_analysis.py # Relationship analysis between two series
+│   └── relationship_narrative.py # Relationship narrative generation
 ├── tests/
 │   ├── test_detector.py
 │   ├── test_extractor.py
-│   └── test_narrative.py
+│   ├── test_narrative.py
+│   ├── test_relationship_analysis.py
+│   └── test_relationship_narrative.py
 ├── pyproject.toml
 └── README.md
 ```
