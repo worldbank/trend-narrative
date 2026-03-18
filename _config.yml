@@ -6,6 +6,12 @@ plugins:
 color_scheme: light
 heading_anchors: true
 nav_enabled: true
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+      has_toc: true
 aux_links:
   "GitHub":
     - "https://github.com/yukinko-iwasaki/trend-narrative"

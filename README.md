@@ -1,10 +1,3 @@
----
-layout: default
-title: trend-narrative
-nav_order: 1
-has_toc: true
----
-
 # trend-narrative
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
