@@ -4,7 +4,7 @@ trend_narrative.relationship_narrative
 Generate human-readable narratives from relationship analysis results.
 
 This module handles the text generation layer, converting structured
-analysis outputs into plain-English descriptions.
+analysis outputs into plain-language descriptions.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from .relationship_analysis import (
     DEFAULT_MAX_LAG_CAP,
     P_THRESHOLD,
 )
+from .translations import get_translations
 
 Formatter = Union[str, Callable[[float], str]]
 
@@ -40,17 +41,19 @@ def _build_comovement_narrative(
     comparison_name: str,
     reference_format: Formatter = ".2f",
     comparison_format: Formatter = ".2f",
+    lang: str = "en",
 ) -> str:
     """Build narrative from segment-level co-movement analysis."""
+    t = get_translations(lang)
+
     if not segment_details:
-        return f"Unable to analyze relationship between {reference_name} and {comparison_name}."
+        return t["unable_to_analyze"].format(x=reference_name, y=comparison_name)
 
     total_comparison_points = sum(seg["comparison_n_points"] for seg in segment_details)
     if total_comparison_points == 0:
-        return (
-            f"The relationship between {reference_name} and {comparison_name} "
-            f"cannot be determined because {comparison_name} data is not available."
-        )
+        return t["no_data_available"].format(x=reference_name, y=comparison_name)
+
+    remained_stable = t["remained_stable"]
 
     # Only build narratives for segments with comparison data
     narratives = []
@@ -69,22 +72,22 @@ def _build_comovement_narrative(
 
         # Override direction if formatted values are the same
         if ref_start == ref_end:
-            ref_dir = "remained stable"
+            ref_dir = remained_stable
 
         if comp_dir is None:
             if comp_n == 1:
                 comp_start = _format_value(seg["comparison_start"], comparison_format)
-                seg_narrative = (
-                    f"{period}, {reference_name} {ref_dir} "
-                    f"({ref_start} to {ref_end}), "
-                    f"with only one {comparison_name} observation ({comp_start})"
+                seg_narrative = t["single_observation"].format(
+                    period=period, ref_name=reference_name, ref_dir=ref_dir,
+                    ref_start=ref_start, ref_end=ref_end,
+                    comp_name=comparison_name, comp_start=comp_start,
                 )
             else:
-                # Multiple observations but all same value - remained stable
                 comp_start = _format_value(seg["comparison_start"], comparison_format)
-                seg_narrative = (
-                    f"{period}, {reference_name} {ref_dir} ({ref_start} to {ref_end}) "
-                    f"while {comparison_name} remained stable ({comp_start})"
+                seg_narrative = t["stable_comparison"].format(
+                    period=period, ref_name=reference_name, ref_dir=ref_dir,
+                    ref_start=ref_start, ref_end=ref_end,
+                    comp_name=comparison_name, comp_start=comp_start,
                 )
         else:
             comp_start = _format_value(seg["comparison_start"], comparison_format)
@@ -92,27 +95,30 @@ def _build_comovement_narrative(
 
             # Override direction if formatted values are the same
             if comp_start == comp_end:
-                comp_dir = "remained stable"
+                comp_dir = remained_stable
 
             # Describe co-movement
             if ref_dir == comp_dir:
-                relationship = "both moving in the same direction"
-            elif ref_dir == "remained stable" or comp_dir == "remained stable":
+                relationship = t["both_same_direction"]
+            elif ref_dir == remained_stable or comp_dir == remained_stable:
                 relationship = None
             else:
-                relationship = "moving in opposite directions"
+                relationship = t["opposite_directions"]
 
             if relationship:
-                seg_narrative = (
-                    f"{period}, {reference_name} {ref_dir} ({ref_start} to {ref_end}) "
-                    f"while {comparison_name} {comp_dir} "
-                    f"({comp_start} to {comp_end}), {relationship}"
+                seg_narrative = t["comovement_with_rel"].format(
+                    period=period, ref_name=reference_name, ref_dir=ref_dir,
+                    ref_start=ref_start, ref_end=ref_end,
+                    comp_name=comparison_name, comp_dir=comp_dir,
+                    comp_start=comp_start, comp_end=comp_end,
+                    relationship=relationship,
                 )
             else:
-                seg_narrative = (
-                    f"{period}, {reference_name} {ref_dir} ({ref_start} to {ref_end}) "
-                    f"while {comparison_name} {comp_dir} "
-                    f"({comp_start} to {comp_end})"
+                seg_narrative = t["comovement_no_rel"].format(
+                    period=period, ref_name=reference_name, ref_dir=ref_dir,
+                    ref_start=ref_start, ref_end=ref_end,
+                    comp_name=comparison_name, comp_dir=comp_dir,
+                    comp_start=comp_start, comp_end=comp_end,
                 )
 
         # Capitalize first letter
@@ -126,10 +132,7 @@ def _build_comovement_narrative(
         narrative = ". ".join(narratives) + "."
 
     # Add caveat about limited data
-    narrative += (
-        f" With limited {comparison_name} data, "
-        "a statistical relationship cannot be established."
-    )
+    narrative += t["limited_data_caveat"].format(comp_name=comparison_name)
 
     return narrative
 
@@ -143,18 +146,21 @@ def _build_lagged_correlation_narrative(
     comparison_name: str,
     time_unit: str = "year",
     reference_leads: bool = True,
+    lang: str = "en",
 ) -> str:
     """Build narrative from lagged correlation analysis.
 
     When reference_leads=True: "When reference increases, comparison follows"
     When reference_leads=False: "When comparison increases, reference follows"
     """
+    t = get_translations(lang)
+
     correlation = best_lag["correlation"]
     p_value = best_lag["p_value"]
     lag = best_lag["lag"]
     n_pairs = best_lag["n_pairs"]
 
-    strength = get_correlation_strength(correlation)
+    strength = get_correlation_strength(correlation, lang=lang)
     is_significant = p_value < P_THRESHOLD
 
     # Determine which series leads based on computation
@@ -165,40 +171,42 @@ def _build_lagged_correlation_narrative(
 
     # Build lag timing description
     if lag == 0:
-        timing = f"in the same {time_unit}"
+        timing = t["timing_same"].format(time_unit=time_unit)
     else:
-        timing = f"about {lag} {_pluralize(time_unit, lag)} later"
+        timing = t["timing_lagged"].format(
+            lag=lag, time_unit_pl=_pluralize(time_unit, lag)
+        )
+
+    # Check for "no" strength using the translated value
+    no_strength = t["strength_no"]
 
     # Not significant: lead with uncertainty
-    if strength == "no" or not is_significant:
-        narrative = (
-            f"No reliable relationship was detected between changes in {reference_name} "
-            f"and {comparison_name}. "
+    if strength == no_strength or not is_significant:
+        narrative = t["no_reliable_relationship"].format(
+            x=reference_name, y=comparison_name
         )
-        if strength != "no":
-            narrative += (
-                f"While the data suggests a {strength} {'positive' if correlation > 0 else 'negative'} "
-                f"pattern (r={correlation:.2f}), this could be due to chance "
-                f"given the limited sample size (n={n_pairs} change pairs, p={p_value:.2f})."
+        if strength != no_strength:
+            sign = t["positive"] if correlation > 0 else t["negative"]
+            narrative += t["weak_pattern"].format(
+                strength=strength, sign=sign,
+                corr=correlation, n_pairs=n_pairs, p_val=p_value,
             )
         else:
             lag_info = (
                 "" if max_lag_tested == 0
                 else f" at any lag tested (0-{max_lag_tested} {_pluralize(time_unit, max_lag_tested)})"
             )
-            narrative += (
-                f"Changes in one do not appear to be associated with changes in the other{lag_info}, "
-                f"based on {n_pairs} {time_unit}-over-{time_unit} comparisons."
+            narrative += t["no_association"].format(
+                lag_info=lag_info, n_pairs=n_pairs, time_unit=time_unit,
             )
     else:
         # Significant: lead with the finding
-        direction_word = "increase" if correlation > 0 else "decrease"
-        narrative = (
-            f"When {leader_name} increases, {follower_name} tends to "
-            f"{direction_word} {timing}. "
-            f"This is a {strength} relationship (r={correlation:.2f}) "
-            f"and is statistically reliable (p={p_value:.3f}), "
-            f"based on {n_pairs} {time_unit}-over-{time_unit} comparisons."
+        direction_word = t["increase"] if correlation > 0 else t["decrease"]
+        narrative = t["significant_finding"].format(
+            leader=leader_name, follower=follower_name,
+            direction_word=direction_word, timing=timing,
+            strength=strength, corr=correlation, p_val=p_value,
+            n_pairs=n_pairs, time_unit=time_unit,
         )
 
     return narrative
@@ -219,6 +227,7 @@ def get_relationship_narrative(
     time_unit: str = "year",
     reference_leads: Optional[bool] = None,
     insights: Optional[dict] = None,
+    lang: str = "en",
 ) -> dict:
     """
     Analyze relationship between two time series and generate narrative.
@@ -306,6 +315,8 @@ def get_relationship_narrative(
     ValueError
         If neither insights nor data arrays are provided.
     """
+    t = get_translations(lang)
+
     if insights is not None:
         analysis = insights
     elif reference_years is not None and comparison_years is not None:
@@ -317,6 +328,7 @@ def get_relationship_narrative(
             reference_segments=reference_segments,
             correlation_threshold=correlation_threshold,
             max_lag_cap=max_lag_cap,
+            lang=lang,
         )
     else:
         raise ValueError(
@@ -331,9 +343,8 @@ def get_relationship_narrative(
     n_points = analysis["n_points"]
 
     if method == "insufficient_data":
-        narrative = (
-            f"The relationship between {reference_name} and {comparison_name} "
-            "cannot be determined due to limited data availability."
+        narrative = t["insufficient_data"].format(
+            x=reference_name, y=comparison_name
         )
     elif method == "lagged_correlation":
         narrative = _build_lagged_correlation_narrative(
@@ -345,6 +356,7 @@ def get_relationship_narrative(
             comparison_name,
             time_unit,
             reference_leads=reference_leads,
+            lang=lang,
         )
     else:
         narrative = _build_comovement_narrative(
@@ -353,6 +365,7 @@ def get_relationship_narrative(
             comparison_name,
             reference_format=reference_format,
             comparison_format=comparison_format,
+            lang=lang,
         )
 
     return {

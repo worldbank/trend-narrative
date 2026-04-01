@@ -18,13 +18,15 @@ from typing import Optional
 import numpy as np
 from scipy import stats
 
+from .translations import get_translations
+
 
 CORRELATION_THRESHOLDS = {
-    0.1: "no",
-    0.3: "weak",
-    0.5: "moderate",
-    0.7: "strong",
-    1.0: "very strong",
+    0.1: "strength_no",
+    0.3: "strength_weak",
+    0.5: "strength_moderate",
+    0.7: "strength_strong",
+    1.0: "strength_very_strong",
 }
 
 THRESHOLD_LOW = 3  # Minimum for any analysis (need 2+ changes to compare)
@@ -33,32 +35,34 @@ DEFAULT_MAX_LAG_CAP = 5  # Domain-appropriate limit for policy effects
 P_THRESHOLD = 0.10  # Threshold for statistical significance
 
 
-def get_direction(values: np.ndarray) -> str:
+def get_direction(values: np.ndarray, lang: str = "en") -> str:
     """Determine direction from start to end value."""
+    t = get_translations(lang)
     if len(values) < 2:
-        return "unknown"
+        return t["unknown"]
 
     start, end = values[0], values[-1]
 
     # Use the non-zero value as denominator; if both zero, stable
     if start == 0 and end == 0:
-        return "remained stable"
+        return t["remained_stable"]
     denominator = abs(start) if start != 0 else abs(end)
     pct_change = (end - start) / denominator
 
     # Less than 5% change is considered stable to avoid overstating minor fluctuations
     if abs(pct_change) < 0.05:
-        return "remained stable"
-    return "increased" if pct_change > 0 else "decreased"
+        return t["remained_stable"]
+    return t["increased"] if pct_change > 0 else t["decreased"]
 
 
-def get_correlation_strength(corr: float) -> str:
+def get_correlation_strength(corr: float, lang: str = "en") -> str:
     """Map correlation coefficient to descriptive strength."""
+    t = get_translations(lang)
     abs_corr = abs(corr)
-    for threshold, strength in sorted(CORRELATION_THRESHOLDS.items()):
+    for threshold, key in sorted(CORRELATION_THRESHOLDS.items()):
         if abs_corr <= threshold:
-            return strength
-    return "very strong"
+            return t[key]
+    return t["strength_very_strong"]
 
 
 def compute_yoy_changes(
@@ -150,6 +154,7 @@ def analyze_segment_comovement(
     segment: dict,
     comparison_years: np.ndarray,
     comparison_values: np.ndarray,
+    lang: str = "en",
 ) -> dict:
     """Analyze comparison series within a single reference segment.
 
@@ -183,11 +188,11 @@ def analyze_segment_comovement(
     return {
         "start_year": int(start_year),
         "end_year": int(end_year),
-        "reference_direction": get_direction(np.array([segment["start_value"], segment["end_value"]])),
+        "reference_direction": get_direction(np.array([segment["start_value"], segment["end_value"]]), lang=lang),
         "reference_start": segment["start_value"],
         "reference_end": segment["end_value"],
         "comparison_n_points": n_points,
-        "comparison_direction": get_direction(np.array([comp_start, comp_end])) if can_calc_direction else None,
+        "comparison_direction": get_direction(np.array([comp_start, comp_end]), lang=lang) if can_calc_direction else None,
         "comparison_start": comp_start,
         "comparison_end": comp_end,
         "interpolated": start_interp and end_interp,
@@ -296,6 +301,7 @@ def analyze_relationship(
     reference_segments: Optional[list[dict]] = None,
     correlation_threshold: int = DEFAULT_CORRELATION_THRESHOLD,
     max_lag_cap: int = DEFAULT_MAX_LAG_CAP,
+    lang: str = "en",
 ) -> dict:
     """
     Analyze relationship between two time series.
@@ -438,7 +444,7 @@ def analyze_relationship(
         }
 
     segment_details = [
-        analyze_segment_comovement(seg, comparison_years, comparison_values)
+        analyze_segment_comovement(seg, comparison_years, comparison_values, lang=lang)
         for seg in reference_segments
     ]
 

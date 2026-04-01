@@ -24,6 +24,8 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Optional
 
+from .translations import get_translations
+
 if TYPE_CHECKING:
     from .extractor import InsightExtractor
 
@@ -35,12 +37,6 @@ CV_LOW_THRESHOLD = 5
 CV_MODERATE_THRESHOLD = 15
 
 _MILLNAMES = ["", " K", " M", " B", " T"]
-
-_TRANSITION_PREFIXES = [
-    "Trend then shifted,",
-    "This trajectory pivoted again,",
-    "Then,",
-]
 
 
 # ------------------------------------------------------------------
@@ -129,6 +125,7 @@ def get_segment_narrative(
     metric: str = "expenditure",
     extractor: Optional["InsightExtractor"] = None,
     n_points: Optional[int] = None,
+    lang: str = "en",
 ) -> str:
     """Generate a plain-English narrative from trend data.
 
@@ -175,6 +172,9 @@ def get_segment_narrative(
     n_points : int, optional
         Number of data points (Path 1). If fewer than 2, returns empty
         string. Automatically inferred when using extractor path.
+    lang : str
+        Language code for the generated narrative (default ``"en"``).
+        Supported: ``"en"``, ``"fr"``.
 
     Returns
     -------
@@ -204,7 +204,7 @@ def get_segment_narrative(
     if n_points is not None and n_points < 2:
         return ""
 
-    return _build_narrative(segments, cv_value, metric)
+    return _build_narrative(segments, cv_value, metric, lang=lang)
 
 
 # ------------------------------------------------------------------
@@ -216,58 +216,62 @@ def _build_narrative(
     segments: list[dict],
     cv_value: float,
     metric: str,
+    lang: str = "en",
 ) -> str:
     """Core narrative logic shared by both calling paths."""
+    t = get_translations(lang)
     segments = consolidate_segments(segments)
 
     # --- No detectable trend: fall back to volatility description ---
     if len(segments) == 0:
         if cv_value < CV_LOW_THRESHOLD:
-            return f"{metric} remained highly stable and range-bound."
+            return t["vol_low"].format(metric=metric)
         elif cv_value <= CV_MODERATE_THRESHOLD:
-            return f"{metric} showed moderate fluctuations around a consistent mean."
+            return t["vol_moderate"].format(metric=metric)
         else:
-            return f"{metric} exhibited significant volatility without a clear direction."
+            return t["vol_high"].format(metric=metric)
 
     # --- Single monotone trend ---
     if len(segments) == 1:
         seg = segments[0]
         total_change = seg["end_value"] - seg["start_value"]
         pct_change = (total_change / seg["start_value"]) * 100 if seg["start_value"] != 0 else 0.0
-        direction = "increased" if total_change > 0 else "decreased"
-        return (
-            f"between {int(seg['start_year'])} and {int(seg['end_year'])}, "
-            f"the {metric} {direction} by {millify(abs(total_change))} "
-            f"({pct_change:+.2f}%), maintaining a consistent trajectory."
+        direction = t["increased"] if total_change > 0 else t["decreased"]
+        return t["single_segment"].format(
+            start_year=int(seg["start_year"]),
+            end_year=int(seg["end_year"]),
+            metric=metric,
+            direction=direction,
+            change=millify(abs(total_change)),
+            pct_change=f"{pct_change:+.2f}",
         )
 
     # --- Multi-segment narrative ---
     narrative: list[str] = []
+    transition_prefixes = t["transition_prefixes"]
     for i, seg in enumerate(segments):
-        direction = "an upward" if seg["slope"] > 0 else "a downward"
+        direction = t["an_upward"] if seg["slope"] > 0 else t["a_downward"]
 
         if i == 0:
             narrative.append(
-                f"From {int(seg['start_year'])} to {int(seg['end_year'])}, "
-                f"the {metric} showed {direction} trend."
+                t["first_segment"].format(
+                    start_year=int(seg["start_year"]),
+                    end_year=int(seg["end_year"]),
+                    metric=metric,
+                    direction=direction,
+                )
             )
         else:
             prev_slope = segments[i - 1]["slope"]
-            prefix = _TRANSITION_PREFIXES[min(i - 1, len(_TRANSITION_PREFIXES) - 1)]
+            prefix = transition_prefixes[min(i - 1, len(transition_prefixes) - 1)]
 
             if prev_slope > 0 and seg["slope"] < 0:
-                transition = (
-                    f"reaching a peak in {int(seg['start_year'])} "
-                    f"before reversing into a decline."
-                )
+                transition = t["peak_reversal"].format(year=int(seg["start_year"]))
             elif prev_slope < 0 and seg["slope"] > 0:
-                transition = (
-                    f"hitting a low in {int(seg['start_year'])} "
-                    f"followed by a recovery."
-                )
+                transition = t["low_recovery"].format(year=int(seg["start_year"]))
             else:
-                transition = (
-                    f"continuing its {direction} path through {int(seg['end_year'])}."
+                transition = t["continuing"].format(
+                    direction=direction, year=int(seg["end_year"])
                 )
 
             narrative.append(f"{prefix} {transition}")
