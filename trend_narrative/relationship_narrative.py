@@ -383,7 +383,7 @@ def get_relationship_narrative(
     reference_name : str or dict
         Display name for the reference series. May be either a plain
         string or a dict bundling the name with grammatical properties
-        for French inflection::
+        for French and Brazilian Portuguese inflection::
 
             {"name": "les dépenses", "plural": True, "feminine": True}
 
@@ -421,7 +421,8 @@ def get_relationship_narrative(
     lang : str
         Language code for the generated narrative (default ``"en"``).
         Supported values are listed in
-        :data:`trend_narrative.SUPPORTED_LANGUAGES` (currently ``"en"``, ``"fr"``).
+        :data:`trend_narrative.SUPPORTED_LANGUAGES`
+        (currently ``"en"``, ``"fr"``, ``"pt-BR"``).
         Only the rendered narrative text depends on this; the returned
         analysis fields (``method``, ``segment_details``, ``best_lag``, …)
         are language-neutral.

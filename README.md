@@ -10,7 +10,7 @@ The **trend-narrative** package is a standalone Python library that combines **p
 
 Given a time series — such as annual health spending or GDP figures — this package automatically identifies meaningful trends (e.g., "rising from 2010 to 2015, then declining") and produces a ready-to-use sentence describing them. It can also compare two time series and explain how they move together or apart over time.
 
-Narratives can be generated in **English** and **French**, with an extensible architecture for adding more languages.
+Narratives can be generated in **English**, **French**, and **Brazilian Portuguese**, with an extensible architecture for adding more languages.
 
 This is useful for analysts, researchers, and developers who need to turn numeric data into human-readable summaries without writing custom text logic each time.
 
@@ -120,20 +120,23 @@ narrative = get_segment_narrative(
 #    La tendance s'est ensuite inversée, atteignant un pic en 2015 avant de s'inverser en déclin."
 ```
 
-Currently supported: `"en"` (English), `"fr"` (French).
+Currently supported: `"en"` (English), `"fr"` (French), `"pt-BR"` (Brazilian Portuguese).
+The aliases `"pt"`, `"pt-br"`, `"pt_br"`, and `"ptbr"` are also accepted and resolve to `"pt-BR"`.
 
-#### Grammatical agreement (French)
+#### Grammatical agreement (French and Brazilian Portuguese)
 
-French verbs and adjectives must agree with the metric's grammatical **number** (singular/plural) and **gender** (masculine/feminine). When the metric isn't singular masculine, pass it as a dict:
+French and Brazilian Portuguese verbs and adjectives may need to agree with the metric's grammatical **number** (singular/plural) and **gender** (masculine/feminine). When the metric isn't singular masculine, pass it as a dict:
 
 ```python
 {"name": "les dépenses",   "plural": True,  "feminine": True}   # plural feminine
 {"name": "les taux",       "plural": True,  "feminine": False}  # plural masculine
 {"name": "la production",  "plural": False, "feminine": True}   # singular feminine
 {"name": "le taux",        "plural": False, "feminine": False}  # singular masculine
+{"name": "as despesas",    "plural": True,  "feminine": True}   # pt-BR plural feminine
+{"name": "o orçamento",    "plural": False, "feminine": False}  # pt-BR singular masculine
 ```
 
-The `plural` / `feminine` keys default to `False`. A plain string (e.g. `metric="les dépenses"`) is accepted, but defaults to singular masculine — silently producing wrong agreement like `dépenses **a augmenté**` instead of `dépenses **ont augmenté**`. **The dict form is strongly recommended for any French metric that isn't singular masculine.**
+The `plural` / `feminine` keys default to `False`. A plain string (e.g. `metric="les dépenses"` or `metric="as despesas"`) is accepted, but defaults to singular masculine — silently producing wrong agreement like `dépenses **a augmenté**` instead of `dépenses **ont augmenté**`, or `despesas **aumentou**` instead of `despesas **aumentaram**`. **The dict form is strongly recommended for any French or Brazilian Portuguese metric that isn't singular masculine.**
 
 The same applies to `reference_name` and `comparison_name` in `get_relationship_narrative`:
 
@@ -240,12 +243,14 @@ The function automatically chooses the analysis method based on data availabilit
 ### `get_segment_narrative(extractor, metric="expenditure", lang="en")`
 
 Generates a narrative for a single time series. Accepts either
-precomputed data or an `InsightExtractor` instance. Set `lang="fr"` for French.
+precomputed data or an `InsightExtractor` instance. Set `lang="fr"` for French
+or `lang="pt-BR"` for Brazilian Portuguese.
 
 `metric` accepts either a plain string or a dict with grammatical
-properties: `{"name": str, "plural": bool, "feminine": bool}`. For French,
-use the dict form when the metric isn't singular masculine — see
-[Grammatical agreement](#grammatical-agreement-french).
+properties: `{"name": str, "plural": bool, "feminine": bool}`. For French
+and Brazilian Portuguese, use the dict form when the metric isn't singular
+masculine — see
+[Grammatical agreement](#grammatical-agreement-french-and-brazilian-portuguese).
 
 - No segments + low CV → *"remained highly stable"*
 - No segments + high CV → *"exhibited significant volatility"*
@@ -385,7 +390,8 @@ trend-narrative/
 │       │                        #   millify, _format_percent, _genitive,
 │       │                        #   _resolve_time_unit, _time_unit_comparison
 │       ├── en.py                # English catalog (data only)
-│       └── fr.py                # French catalog (data only)
+│       ├── fr.py                # French catalog (data only)
+│       └── ptbr.py              # Brazilian Portuguese catalog (data only)
 ├── tests/
 │   ├── test_detector.py
 │   ├── test_extractor.py
@@ -411,11 +417,12 @@ To add a new language (e.g. Spanish):
 3. **Register** the new module in `trend_narrative/translations/__init__.py`:
 
    ```python
-   from . import en, fr, es  # add the new import
+   from . import en, fr, ptbr, es  # add the new import
 
    _REGISTRY: dict[str, dict[str, object]] = {
        "en": en.STRINGS,
        "fr": fr.STRINGS,
+       "pt-BR": ptbr.STRINGS,
        "es": es.STRINGS,  # add the new entry
    }
    ```
@@ -427,7 +434,7 @@ To add a new language (e.g. Spanish):
        return _genitive_es(name)
    ```
 
-`SUPPORTED_LANGUAGES` updates automatically. A catalog-parity check fires at import time (`_assert_catalog_parity`) and raises `ImportError` if your catalog is missing any top-level keys present in English — so half-finished catalogs fail loud rather than producing wrong output in production.
+`SUPPORTED_LANGUAGES` updates automatically. Catalog validation fires at import time and raises `ImportError` if your catalog is missing top-level keys, malformed nested locale settings, time units, or number-format settings — so half-finished catalogs fail loud rather than producing wrong output in production.
 
 ---
 
