@@ -389,7 +389,7 @@ def get_translations(lang: str = "en") -> dict[str, object]:
     Parameters
     ----------
     lang : str
-        ISO 639-1 language code (default ``"en"``).
+        Language tag or supported alias (default ``"en"``).
 
     Raises
     ------
