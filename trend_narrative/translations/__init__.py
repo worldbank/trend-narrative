@@ -57,7 +57,8 @@ _REQUIRED_TIME_UNIT_KEYS = frozenset({
 
 def _normalize_lang(lang: str) -> str:
     """Return the canonical language code used by the registry."""
-    return _LANG_ALIASES.get(lang, lang)
+    normalized = lang.lower()
+    return _LANG_ALIASES.get(normalized, normalized)
 
 
 def _assert_catalog_parity() -> None:

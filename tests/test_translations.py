@@ -291,6 +291,10 @@ class TestCatalogModule:
     def test_brazilian_portuguese_aliases(self, alias):
         assert get_translations(alias) is get_translations("pt-BR")
 
+    @pytest.mark.parametrize("lang", ["EN", "Fr", "PT-BR", "pt_BR"])
+    def test_language_codes_are_case_insensitive(self, lang):
+        assert get_translations(lang) is get_translations(lang.lower())
+
     def test_unsupported_language_raises(self):
         with pytest.raises(ValueError, match="Unsupported language"):
             get_translations("xx")
