@@ -66,8 +66,8 @@ STRINGS: dict[str, object] = {
     ),
     "vol_high": (
         "{number, select, "
-        "singular {{metric} apresentou volatilidade significativa sem uma direção clara.} "
-        "other {{metric} apresentaram volatilidade significativa sem uma direção clara.}}"
+        "singular {{metric} apresentou volatilidade sem uma direção clara.} "
+        "other {{metric} apresentaram volatilidade sem uma direção clara.}}"
     ),
 
     # narrative.py — single segment
@@ -123,7 +123,7 @@ STRINGS: dict[str, object] = {
         "other {{period}, {ref_name} {ref_dir} ({ref_start} a {ref_end}) enquanto {comp_name} permaneceram estáveis ({comp_start})}}"
     ),
     "both_same_direction": "ambos se movendo na mesma direção",
-    "opposite_directions": "movendo-se em direções opostas",
+    "opposite_directions": "movendo-se em direções contrárias",
     "comovement_with_rel": (
         "{period}, {ref_name} {ref_dir} ({ref_start} a {ref_end}) "
         "enquanto {comp_name} {comp_dir} "
@@ -136,7 +136,7 @@ STRINGS: dict[str, object] = {
     ),
     "limited_data_caveat": (
         "Com dados limitados sobre {comp_name}, "
-        "não é possível estabelecer uma relação estatística."
+        "não foi possível estabelecer uma relação estatística."
     ),
 
     # relationship_narrative.py — lagged correlation
@@ -151,7 +151,7 @@ STRINGS: dict[str, object] = {
         "e {y_gen}. "
     ),
     "weak_pattern": (
-        "Embora os dados sugiram um padrão {sign} {strength} "
+        "Embora os dados sugiram uma tendência {sign} {strength} "
         "(r={corr}), isso pode ter ocorrido por acaso "
         "devido ao tamanho limitado da amostra (n={n_pairs} pares de variação, p={p_val})."
     ),
@@ -182,8 +182,8 @@ STRINGS: dict[str, object] = {
     ),
 
     # Positive / negative labels for correlation sign
-    "positive": "positivo",
-    "negative": "negativo",
+    "positive": "positiva",
+    "negative": "negativa",
     "increase": "aumentar",
     "decrease": "diminuir",
 }
