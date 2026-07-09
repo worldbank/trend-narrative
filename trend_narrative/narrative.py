@@ -147,7 +147,8 @@ def get_segment_narrative(
 
         * a plain string (e.g. ``"real expenditure"``), or
         * a dict bundling the display name with grammatical properties
-          used for French inflection (ignored for English)::
+          used for French and Brazilian Portuguese inflection
+          (ignored for English)::
 
               {"name": "les dépenses", "plural": True, "feminine": True}
 
@@ -160,7 +161,7 @@ def get_segment_narrative(
         string. Automatically inferred when using extractor path.
     lang : str
         Language code for the generated narrative (default ``"en"``).
-        Supported: ``"en"``, ``"fr"``.
+        Supported: ``"en"``, ``"fr"``, ``"pt-BR"``.
 
     Returns
     -------

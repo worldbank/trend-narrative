@@ -99,6 +99,11 @@ class TestIcuFormat:
         ("fr", "increased", {"number": "singular"}, "a augmenté"),
         ("fr", "increased", {"number": "plural"}, "ont augmenté"),
         ("fr", "decreased", {"number": "plural"}, "ont diminué"),
+        # Brazilian Portuguese subject-verb agreement.
+        ("pt-BR", "increased", {"number": "singular"}, "aumentou"),
+        ("pt-BR", "increased", {"number": "plural"}, "aumentaram"),
+        ("pt-BR", "decreased", {"number": "plural"}, "diminuíram"),
+        ("pt-BR", "remained_stable", {"number": "plural"}, "permaneceram estáveis"),
         # French être verbs: nested number × gender.
         ("fr", "remained_stable",
          {"number": "singular", "gender": "masculine"}, "est resté stable"),
@@ -154,6 +159,14 @@ class TestGenitive:
         # French bare-noun elision before vowel
         ("fr", "économies", "d'économies"),
         ("fr", "prix", "de prix"),
+        # Brazilian Portuguese article contractions
+        ("pt-BR", "as despesas", "das despesas"),
+        ("pt-BR", "os gastos", "dos gastos"),
+        ("pt-BR", "a receita", "da receita"),
+        ("pt-BR", "o orçamento", "do orçamento"),
+        ("pt-BR", "investimento", "de investimento"),
+        # Alias spelling should behave like canonical pt-BR.
+        ("ptbr", "as despesas", "das despesas"),
         # English
         ("en", "spending", "of spending"),
         # Unimplemented language: passthrough
@@ -176,12 +189,18 @@ class TestResolveTimeUnit:
         ("en", "year", 5, "years"),
         ("fr", "year", 1, "année"),
         ("fr", "year", 5, "années"),
+        ("pt-BR", "year", 1, "ano"),
+        ("pt-BR", "year", 5, "anos"),
+        ("pt-BR", "month", 1, "mês"),
+        ("pt-BR", "month", 5, "meses"),
         # Unknown units: English appends "s", French passes through.
         # This prevents "fortnights" appearing inside French prose.
         ("en", "fortnight", 1, "fortnight"),
         ("en", "fortnight", 5, "fortnights"),
         ("fr", "quinzaine", 1, "quinzaine"),
         ("fr", "quinzaine", 5, "quinzaine"),
+        ("pt-BR", "quinzena", 1, "quinzena"),
+        ("pt-BR", "quinzena", 5, "quinzena"),
     ])
     def test_resolve(self, lang, unit, count, expected):
         assert _resolve_time_unit(get_translations(lang), unit, count) == expected
@@ -193,6 +212,9 @@ class TestTimeUnitComparison:
         ("fr", "mois", "de mois en mois"),          # consonant
         ("fr", "semaine", "de semaine en semaine"),
         ("fr", "trimestre", "de trimestre en trimestre"),
+        ("pt-BR", "ano", "ano a ano"),
+        ("pt-BR", "mês", "mês a mês"),
+        ("ptbr", "ano", "ano a ano"),
         ("en", "year", "year-over-year"),
         ("en", "month", "month-over-month"),
     ])
@@ -208,6 +230,9 @@ class TestFormatPercent:
         (250.0, "fr", "+250,00 %"),
         (-50.0, "fr", "-50,00 %"),
         (0.0, "fr", "+0,00 %"),
+        (250.0, "pt-BR", "+250,00 %"),
+        (-50.0, "pt-BR", "-50,00 %"),
+        (0.0, "pt-BR", "+0,00 %"),
     ])
     def test_format_percent(self, value, lang, expected):
         assert _format_percent(value, lang=lang) == expected
@@ -230,6 +255,13 @@ class TestMillify:
         (750, "fr", "750,00"),
         (0, "fr", "0,00"),
         (-500_000, "fr", "-500,00 k"),
+        # Brazilian Portuguese: comma decimal and localized suffixes.
+        (1_500, "pt-BR", "1,50 mil"),
+        (2_000_000, "pt-BR", "2,00 mi"),
+        (3_000_000_000, "pt-BR", "3,00 bi"),
+        (750, "pt-BR", "750,00"),
+        (0, "pt-BR", "0,00"),
+        (-500_000, "pt-BR", "-500,00 mil"),
     ])
     def test_millify(self, n, lang, expected):
         assert millify(n, lang=lang) == expected
@@ -250,10 +282,18 @@ class TestMillify:
 
 class TestCatalogModule:
     def test_supported_languages(self):
-        assert {"en", "fr"} <= set(SUPPORTED_LANGUAGES)
+        assert {"en", "fr", "pt-BR"} <= set(SUPPORTED_LANGUAGES)
 
     def test_get_translations_en(self):
         assert get_translations("en")["increased"] == "increased"
+
+    @pytest.mark.parametrize("alias", ["pt", "pt-br", "pt_br", "ptbr"])
+    def test_brazilian_portuguese_aliases(self, alias):
+        assert get_translations(alias) is get_translations("pt-BR")
+
+    @pytest.mark.parametrize("lang", ["EN", "Fr", "PT-BR", "pt_BR"])
+    def test_language_codes_are_case_insensitive(self, lang):
+        assert get_translations(lang) is get_translations(lang.lower())
 
     def test_unsupported_language_raises(self):
         with pytest.raises(ValueError, match="Unsupported language"):
@@ -293,6 +333,36 @@ class TestCorrelationStrengthFrench:
         assert get_translations("fr")[get_correlation_strength(corr)] == expected
 
 
+class TestDirectionPortugueseBR:
+    """End-to-end: analysis direction keys resolve to Brazilian Portuguese."""
+
+    @pytest.mark.parametrize("values, number, expected", [
+        ([100, 200], "singular", "aumentou"),
+        ([100, 200], "plural", "aumentaram"),
+        ([200, 100], "singular", "diminuiu"),
+        ([200, 100], "plural", "diminuíram"),
+        ([100, 100], "singular", "permaneceu estável"),
+        ([100, 100], "plural", "permaneceram estáveis"),
+        ([100], "singular", "desconhecido"),
+    ])
+    def test_direction_resolves(self, values, number, expected):
+        t = get_translations("pt-BR")
+        key = get_direction(np.array(values))
+        assert icu_format(t[key], number=number) == expected
+
+
+class TestCorrelationStrengthPortugueseBR:
+    @pytest.mark.parametrize("corr, expected", [
+        (0.05, "nenhuma"),
+        (0.2, "fraca"),
+        (0.4, "moderada"),
+        (0.6, "forte"),
+        (0.9, "muito forte"),
+    ])
+    def test_strength_resolves(self, corr, expected):
+        assert get_translations("pt-BR")[get_correlation_strength(corr)] == expected
+
+
 # ===========================================================================
 # Layer 3: Integration
 # Smoke tests verifying each narrative path wires through the localization
@@ -327,6 +397,18 @@ class TestSegmentNarrativeIntegration:
         )
         assert "ont augmenté" in text
         assert " Md" in text
+        assert "+300,00 %" in text
+
+    def test_single_segment_localized_numbers_portuguese_br(self):
+        """End-to-end: comma decimal, space before %, and Brazilian suffixes."""
+        segs = [_seg(2010, 2020, slope=3e8, start_value=1e9, end_value=4e9)]
+        text = get_segment_narrative(
+            segments=segs, cv_value=8.0,
+            metric={"name": "as despesas", "plural": True, "feminine": True},
+            lang="pt-BR",
+        )
+        assert "aumentaram" in text
+        assert " bi" in text
         assert "+300,00 %" in text
 
     def test_multi_segment_peak_transition_french(self):
@@ -381,6 +463,15 @@ class TestRelationshipNarrativeIntegration:
         assert result["method"] == "insufficient_data"
         assert "ne peut être déterminée" in result["narrative"]
 
+    def test_insufficient_data_portuguese_br(self):
+        result = get_relationship_narrative(
+            reference_years=self.SHORT_YEARS, reference_values=self.SHORT_VALUES,
+            comparison_years=self.SHORT_YEARS, comparison_values=self.SHORT_VALUES,
+            reference_name="despesas", comparison_name="resultado", lang="pt-BR",
+        )
+        assert result["method"] == "insufficient_data"
+        assert "não pode ser determinada" in result["narrative"]
+
     def test_comovement_french_with_dict_metrics(self):
         result = get_relationship_narrative(
             reference_years=np.array([2010, 2015, 2020]),
@@ -394,6 +485,20 @@ class TestRelationshipNarrativeIntegration:
         )
         assert result["method"] == "comovement"
         assert "ont augmenté" in result["narrative"]
+
+    def test_comovement_portuguese_br_with_dict_metrics(self):
+        result = get_relationship_narrative(
+            reference_years=np.array([2010, 2015, 2020]),
+            reference_values=np.array([100, 125, 150], dtype=float),
+            comparison_years=np.array([2012, 2015, 2018]),
+            comparison_values=np.array([50, 65, 80], dtype=float),
+            reference_name={"name": "as despesas de saúde",
+                            "plural": True, "feminine": True},
+            comparison_name={"name": "os índices", "plural": True},
+            lang="pt-BR",
+        )
+        assert result["method"] == "comovement"
+        assert "aumentaram" in result["narrative"]
 
     @pytest.mark.parametrize("ref, comp, leader_verb, follower_verb", [
         # significant_finding has two independent subject-verb pairs;
@@ -438,6 +543,22 @@ class TestRelationshipNarrativeIntegration:
         narrative = result["narrative"]
         assert "de les" not in narrative
         assert "de le " not in narrative
+
+    def test_no_de_article_leaks_in_portuguese_output(self):
+        """Portuguese genitive contractions should prevent 'de as'/'de o'."""
+        rng = np.random.default_rng(42)
+        n = 15
+        years = np.arange(2000, 2000 + n, dtype=float)
+        result = get_relationship_narrative(
+            reference_years=years, reference_values=rng.normal(100, 10, n),
+            comparison_years=years, comparison_values=rng.normal(50, 5, n),
+            reference_name={"name": "as despesas", "plural": True, "feminine": True},
+            comparison_name={"name": "o orçamento", "plural": False},
+            lang="pt-BR",
+        )
+        narrative = result["narrative"]
+        assert "de as " not in narrative
+        assert "de o " not in narrative
 
     def test_comovement_french_localizes_numeric_values(self):
         """Regression: numeric values inside parens must use ',' in French.

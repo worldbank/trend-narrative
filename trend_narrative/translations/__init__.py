@@ -19,14 +19,14 @@ from __future__ import annotations
 import math
 from typing import Union
 
-from . import en, fr
+from . import en, fr, ptbr
 
 # Public type alias: anything accepted by `_unpack_metric` as a metric name.
 MetricLike = Union[str, dict]
 
 # English is the reference catalog. Every other language MUST have exactly
 # the same set of keys — validated at import time (see _assert_catalog_parity
-# below). This turns a "missing key crashes French users in production" bug
+# below). This turns a "missing key crashes localized users in production" bug
 # into an ImportError that fires as soon as the package is loaded.
 _REFERENCE_LANG = "en"
 
@@ -35,9 +35,30 @@ _REFERENCE_LANG = "en"
 _REGISTRY: dict[str, dict[str, object]] = {
     "en": en.STRINGS,
     "fr": fr.STRINGS,
+    "pt-BR": ptbr.STRINGS,
 }
 
 SUPPORTED_LANGUAGES = tuple(_REGISTRY.keys())
+
+_LANG_ALIASES = {
+    "pt": "pt-BR",
+    "pt-br": "pt-BR",
+    "pt_br": "pt-BR",
+    "ptbr": "pt-BR",
+}
+
+_REQUIRED_NUMBER_FORMAT_KEYS = frozenset({
+    "decimal_sep", "percent_template", "suffixes",
+})
+_REQUIRED_TIME_UNIT_KEYS = frozenset({
+    "year", "month", "quarter", "week", "day",
+})
+
+
+def _normalize_lang(lang: str) -> str:
+    """Return the canonical language code used by the registry."""
+    normalized = lang.lower()
+    return _LANG_ALIASES.get(normalized, normalized)
 
 
 def _assert_catalog_parity() -> None:
@@ -67,7 +88,64 @@ def _assert_catalog_parity() -> None:
         )
 
 
+def _assert_catalog_schema() -> None:
+    """Validate nested translation settings needed by formatting helpers."""
+    problems: list[str] = []
+    for lang, catalog in _REGISTRY.items():
+        number_format = catalog.get("number_format")
+        if not isinstance(number_format, dict):
+            problems.append(f"  {lang!r} number_format must be a dict")
+        else:
+            missing = _REQUIRED_NUMBER_FORMAT_KEYS - set(number_format.keys())
+            if missing:
+                problems.append(
+                    f"  {lang!r} number_format missing keys: {sorted(missing)}"
+                )
+            suffixes = number_format.get("suffixes")
+            if not isinstance(suffixes, list) or len(suffixes) < 5:
+                problems.append(
+                    f"  {lang!r} number_format.suffixes must contain at least "
+                    "5 ordered suffixes"
+                )
+
+        time_units = catalog.get("time_units")
+        if not isinstance(time_units, dict):
+            problems.append(f"  {lang!r} time_units must be a dict")
+        else:
+            missing = _REQUIRED_TIME_UNIT_KEYS - set(time_units.keys())
+            if missing:
+                problems.append(
+                    f"  {lang!r} time_units missing keys: {sorted(missing)}"
+                )
+            for unit, forms in time_units.items():
+                if not (
+                    isinstance(forms, tuple)
+                    and len(forms) == 2
+                    and all(isinstance(form, str) for form in forms)
+                ):
+                    problems.append(
+                        f"  {lang!r} time_units[{unit!r}] must be a "
+                        "(singular, plural) tuple"
+                    )
+
+        genders = catalog.get("time_unit_genders")
+        if not isinstance(genders, dict):
+            problems.append(f"  {lang!r} time_unit_genders must be a dict")
+        else:
+            missing = _REQUIRED_TIME_UNIT_KEYS - set(genders.keys())
+            if missing:
+                problems.append(
+                    f"  {lang!r} time_unit_genders missing keys: {sorted(missing)}"
+                )
+
+    if problems:
+        raise ImportError(
+            "Translation catalog schema errors detected:\n" + "\n".join(problems)
+        )
+
+
 _assert_catalog_parity()
+_assert_catalog_schema()
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +157,7 @@ _assert_catalog_parity()
 #        metric="real expenditure"
 #
 # 2. A dict bundling the display name with grammatical properties
-#    (needed for French plural/gender agreement, ignored otherwise):
+#    (needed for French/Portuguese plural/gender agreement, ignored otherwise):
 #        metric={"name": "les dépenses", "plural": True, "feminine": True}
 #
 # ``_unpack_metric`` normalizes both forms to ``(name, icu_kwargs)`` where
@@ -312,15 +390,16 @@ def get_translations(lang: str = "en") -> dict[str, object]:
     Parameters
     ----------
     lang : str
-        ISO 639-1 language code (default ``"en"``).
+        Language tag or supported alias (default ``"en"``).
 
     Raises
     ------
     ValueError
         If *lang* is not a supported language code.
     """
+    normalized = _normalize_lang(lang)
     try:
-        return _REGISTRY[lang]
+        return _REGISTRY[normalized]
     except KeyError:
         raise ValueError(
             f"Unsupported language '{lang}'. "
@@ -390,6 +469,21 @@ def _genitive_fr(name: str) -> str:
     return "de " + name
 
 
+def _genitive_ptbr(name: str) -> str:
+    """Brazilian Portuguese genitive with common article contractions."""
+    if not name:
+        return name
+    if name.startswith("os "):
+        return "dos " + name[3:]
+    if name.startswith("as "):
+        return "das " + name[3:]
+    if name.startswith("o "):
+        return "do " + name[2:]
+    if name.startswith("a "):
+        return "da " + name[2:]
+    return "de " + name
+
+
 def _genitive(lang: str, name: str) -> str:
     """Return the genitive ("of X") form of *name* in the given language.
 
@@ -406,9 +500,12 @@ def _genitive(lang: str, name: str) -> str:
     """
     if not name:
         return name
-    if lang == "fr":
+    normalized = _normalize_lang(lang)
+    if normalized == "fr":
         return _genitive_fr(name)
-    if lang == "en":
+    if normalized == "pt-BR":
+        return _genitive_ptbr(name)
+    if normalized == "en":
         return "of " + name
     return name
 
@@ -419,10 +516,13 @@ def _time_unit_comparison(lang: str, time_unit_sg: str) -> str:
     Handles French elision: ``d'année en année`` (vowel) vs
     ``de mois en mois`` (consonant).
     """
-    if lang == "fr":
+    normalized = _normalize_lang(lang)
+    if normalized == "fr":
         first_char = time_unit_sg[0].lower() if time_unit_sg else ""
         prep = "d'" if first_char in _FRENCH_VOWELS else "de "
         return f"{prep}{time_unit_sg} en {time_unit_sg}"
+    if normalized == "pt-BR":
+        return f"{time_unit_sg} a {time_unit_sg}"
     return f"{time_unit_sg}-over-{time_unit_sg}"
 
 

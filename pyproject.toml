@@ -12,12 +12,13 @@ license = { text = "MIT" }
 authors = [
     { name = "Yuki Suzuki", email = "yukinko.iwasaki@gmail.com" }
 ]
-keywords = ["trend", "narrative", "time-series", "piecewise", "statistics", "i18n", "french"]
+keywords = ["trend", "narrative", "time-series", "piecewise", "statistics", "i18n", "french", "portuguese"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
     "Natural Language :: English",
     "Natural Language :: French",
+    "Natural Language :: Portuguese (Brazilian)",
 ]
 
 dependencies = [
